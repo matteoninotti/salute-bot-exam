@@ -264,3 +264,8 @@ secrets/
 
 # Throwaway feasibility spike (to be discarded per project log, never committed)
 _spike_throwaway/
+
+# Recon captures that carry the real CF/NRE — NEVER commit. Only the redacted
+# fixtures (recon/*_redacted.*) are tracked; the raw HAR + notes stay local.
+recon/flow.har
+recon/recon.txt
