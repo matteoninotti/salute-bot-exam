@@ -29,7 +29,10 @@ CREATE TABLE IF NOT EXISTS targets (
     prestazione  TEXT NOT NULL REFERENCES prestazioni(code) ON DELETE CASCADE,
     nre_enc      TEXT NOT NULL,                       -- AEAD ciphertext of the NRE (D3)
     active       INTEGER NOT NULL DEFAULT 1,          -- 1/0; rotation deactivates (D28)
-    PRIMARY KEY (user, prestazione)                   -- one target per (user, prestazione) (D33)
+    -- One target per (user, prestazione) (D34): re-subscribing replaces the NRE
+    -- rather than duplicating the row. Revisit if a user ever needs two live
+    -- NREs for the same prestazione code at once.
+    PRIMARY KEY (user, prestazione)
 );
 
 -- Fan-out join + representative-NRE selection both scan targets by prestazione.
