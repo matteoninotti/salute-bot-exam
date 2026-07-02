@@ -8,8 +8,6 @@ the whole app is built around the parser (build strategy D, requirement #2).
 The expected values below were read directly out of that fixture.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

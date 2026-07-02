@@ -1,20 +1,22 @@
 # salute-bot — operating notes for Claude
 
-Alert-first slot-watcher for the Piemonte SSN **CUP** no-login flow (Codice Fiscale + NRE). Watches the public booking flow headlessly and **notifies the moment a slot opens**. No auto-booking in the MVP. Multi-user from day one. **Deadline: 2026-07-02.** School project (ITS ICT, Python class).
+Alert-first slot-watcher for the Piemonte SSN **CUP** no-login flow (Codice Fiscale + NRE). Watches the public booking flow headlessly and **notifies the moment a slot opens**. No auto-booking in the MVP. Multi-user from day one. **Deadline: 2026-07-04.** School project (ITS ICT, Python class).
 
-> This file is a thin pointer + the essentials needed to work in-repo. The old PRD and decision log were **discarded** (drifted out of alignment); the **decision log has since been rebuilt** (`salute-bot-log.md` — the live decision record, D1–D15), while the **PRD is still to be rebuilt** from it + the feasibility. The log holds the full history + rationale.
+> This file is a thin pointer + the essentials needed to work in-repo. The old PRD and decision log were **discarded** (drifted out of alignment); both have since been **rebuilt**: the decision log (`salute-bot-log.md` — the live decision record, D1–D31) and the PRD (`salute-bot-prd.md`, rebuilt 2026-07-04 from the log + the feasibility). The log holds the full history + rationale.
 
 ## Canonical docs (vault — not in this repo)
 
 - Feasibility (IT, for submission): `/Users/matteo/Library/CloudStorage/OneDrive-Personal/Documenti/my_vault/ITS/python/salute-bot-project/salute-bot-feasibility_v2.md`
-- PRD / build spec: **TBD — the only doc not yet rebuilt.** To be written from the log's decisions (D1–D15) + the feasibility; will live at `/Users/matteo/Library/CloudStorage/OneDrive-Personal/Documenti/my_vault/ITS/python/salute-bot-project/salute-bot-prd.md`
-- Recon + decision log (live history): `/Users/matteo/Library/CloudStorage/OneDrive-Personal/Documenti/my_vault/ITS/python/salute-bot-project/salute-bot-log.md` — **rebuilt 2026-06-15**: §1 recon · §2 decisions · §3 open questions. The single source of truth for specs, architecture, and rationale — CLAUDE.md just points here.
+- PRD / build spec: `/Users/matteo/Library/CloudStorage/OneDrive-Personal/Documenti/my_vault/ITS/python/salute-bot-project/salute-bot-prd.md` — **rebuilt 2026-07-04** (D31) from the log's decisions (D1–D30) + the feasibility. A synthesis, not a new source of truth — every requirement in it cites the `D#` that authorizes it.
+- Recon + decision log (live history): `/Users/matteo/Library/CloudStorage/OneDrive-Personal/Documenti/my_vault/ITS/python/salute-bot-project/salute-bot-log.md` — **rebuilt 2026-06-15**: §1 recon · §2 decisions · §3 open questions. The single source of truth for specs, architecture, and rationale — CLAUDE.md and the PRD both just point here.
 
 ## How to work here (hard guardrails)
 
 - **Build mode (active 2026-07-01, deadline crunch).** Work autonomously in module-sized batches, commit at each boundary, tests green before moving on.
 - **keep the responses brief** 1 sentence min, 6 sentences max
 - **Python at the core is a hard requirement** (it's a Python class).
+- **Encapsulation: attributes are private by default.** Every attribute must be private (name-mangled `__attr`) except where it *explicitly* needs to be protected (`_attr`) or public — and any such exception is justified case by case, never granted by category. *This is a **professor requirement** for the Python project, not a stylistic preference.*
+- **No `from __future__ import annotations`.** We target Python 3.14, which defers annotation evaluation by default (PEP 649), so the import is redundant — don't add it.
 - **Secrets (CF/NRE) never appear in chat, code, or logs.** They're persisted **encrypted at rest in SQLite**; the encryption key comes from **env only** (never committed, never stored in the DB).
 - **Don't hard-wrap prose mid-sentence in docs.** No line breaks (`\n`, `<br>`, etc.) within a sentence — break only where structurally needed (after a period, a list item, a new paragraph). Let lines run long; the editor soft-wraps.
 - **Record locked decisions in the log.** Every time a **locked** decision is added or changed, append it to `salute-bot-log.md` §2 under a `### YYYY-MM-DD` heading reflecting the **current date** (a new heading per day; `D#` numbering runs **continuously** across all dates — the next decision after `D13` is `D14`) — never rewrite past entries.

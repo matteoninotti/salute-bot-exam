@@ -9,8 +9,6 @@ out of the key because they are the most cosmetically volatile fields and would
 cause false "new slot" alerts.
 """
 
-from __future__ import annotations
-
 import hashlib
 from dataclasses import dataclass
 
@@ -22,6 +20,13 @@ _KEY_SEP = "\x1f"
 @dataclass(frozen=True)
 class Slot:
     """One bookable appointment parsed from the slots page.
+
+    Encapsulation exception (CLAUDE.md private-by-default rule): the fields are
+    public. Justification — `Slot` is an immutable, frozen data-carrier (DTO)
+    whose fields *are* its read-only interface; name-mangling them would defeat
+    the dataclass machinery and is non-idiomatic. This carve-out is granted for
+    this specific class, not for data-carriers as a category.
+
 
     Key fields (feed `slot_key`, per D16):
         iso_date   -- ISO date, weekday dropped (e.g. "2026-06-22")

@@ -14,8 +14,6 @@ id: the JSF row ids (`…:j_idt699:0:` … `:16:`) are positional and renumber o
 every render, so keying on them would be fragile.
 """
 
-from __future__ import annotations
-
 import re
 
 from bs4 import BeautifulSoup
