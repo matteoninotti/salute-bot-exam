@@ -22,6 +22,7 @@ appear in a message; no CF/NRE ever passes through here.
 """
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from html import escape
 from typing import Protocol
@@ -84,10 +85,11 @@ class SesMailer:
         self.__client = client
 
     @classmethod
-    def from_env(cls, env: dict[str, str] | None = None) -> "SesMailer":
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "SesMailer":
         """Build from env: `SALUTEBOT_SENDER_EMAIL` (required, the verified sender);
         optional `SALUTEBOT_AWS_REGION`/`AWS_REGION` and `SALUTEBOT_SES_ENDPOINT`
-        (the last points boto3 at LocalStack in CI, D12/D15)."""
+        (the last points boto3 at LocalStack in CI, D12/D15). Typed as `Mapping`,
+        not `dict`: `os.environ` is an `os._Environ`, which does not subclass `dict`."""
         source = os.environ if env is None else env
         sender = source.get("SALUTEBOT_SENDER_EMAIL")
         if not sender:
