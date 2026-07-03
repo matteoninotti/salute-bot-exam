@@ -26,7 +26,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 - [ ] **(M)** Crypto layer (D29): `cf_hash = HMAC-SHA256(cf, hmac_key)` blind index (PK/FK); `cf_enc`/`nre` AEAD; two separate env keys
 - [ ] **(M)** Detector: per-prestazione dedup (D8/D20) — `new = current − known` in memory, `first_seen` written once, `last_seen` bumped
 - [ ] **(M)** Alert fan-out: `slots(new) → targets → users` join; SES email adapter (D10/D15)
-- [ ] **(M)** CLI client: registration (new/returning user, D14), `-u [CF]`, `--list`, `--disable [NRE]`, `--disable-all`, `--delete-user`
+- [ ] **(M)** CLI client: registration (new/returning user, D14), `-u [CF]` (value optional, prompt when omitted), `--list`, `--disable` (numbered menu by prestazione, no secret in argv — D35), `--disable-all`, `--delete-user`
 - [ ] **(M)** `--check-now`: CLI-owned cooldown + block-poll (D24/D26); daemon serving via two timestamps
 
 ## Phase 3 — daemon / service
