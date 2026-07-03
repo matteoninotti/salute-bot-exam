@@ -100,6 +100,32 @@ class Store:
         )
         self.__conn.commit()
 
+    def deactivate_all_targets(self, cf: str) -> int:
+        """Disable every one of a user's targets (`--disable-all`); return the count."""
+        cur = self.__conn.execute(
+            "UPDATE targets SET active = 0 WHERE user = ?", (self.__crypto.hash_cf(cf),)
+        )
+        self.__conn.commit()
+        return cur.rowcount
+
+    def list_user_slots(self, cf: str) -> list[dict]:
+        """All slots for the prestazioni a user watches, for `--list` (D20).
+
+        Joins the user's targets to the shared per-prestazione `slots`; ordered by
+        code then date/time. No NRE is read. A watched prestazione with no slots
+        yet simply contributes no rows."""
+        rows = self.__rows(
+            "SELECT p.code, p.descrizione, s.iso_date, s.time, s.struttura, "
+            "s.cap, s.address, s.status, s.first_seen, s.last_seen "
+            "FROM targets t "
+            "JOIN slots s ON s.prestazione = t.prestazione "
+            "JOIN prestazioni p ON p.code = t.prestazione "
+            "WHERE t.user = ? "
+            "ORDER BY p.code, s.iso_date, s.time",
+            (self.__crypto.hash_cf(cf),),
+        )
+        return [dict(r) for r in rows]
+
     def representative_nre(self, code: str) -> str | None:
         """The driver NRE for a scrape: first active subscriber's NRE, decrypted
         (D28). None when the prestazione has no active target (dormant)."""
