@@ -279,6 +279,26 @@ def render_watch_failing_notice(code: str, descrizione: str | None = None) -> Em
     return EmailContent(subject=subject, text=body, html=html)
 
 
+def render_dead_man_notice() -> EmailContent:
+    """The D11 dead-man notice: the watcher itself has stopped, so *no* prestazione
+    is being checked. Broadcast to all users by an external checker (a live daemon
+    can't send this about itself) when the heartbeat goes stale."""
+    subject = "salute-bot: il servizio di monitoraggio è temporaneamente sospeso"
+    body = (
+        "Il servizio di monitoraggio salute-bot si è interrotto e al momento non sta "
+        "controllando la disponibilità dei posti.\n\n"
+        "Stiamo lavorando per ripristinarlo e riprenderemo ad avvisarti appena il "
+        "servizio torna attivo. Le tue ricette restano registrate."
+    )
+    html = (
+        "<p>Il servizio di monitoraggio salute-bot si è interrotto e al momento non "
+        "sta controllando la disponibilità dei posti.</p>"
+        "<p>Stiamo lavorando per ripristinarlo e riprenderemo ad avvisarti appena il "
+        "servizio torna attivo. Le tue ricette restano registrate.</p>"
+    )
+    return EmailContent(subject=subject, text=body, html=html)
+
+
 def _slot_line(slot: Slot) -> str:
     """One-line human rendering of a slot for the alert body."""
     where = slot.struttura or "?"

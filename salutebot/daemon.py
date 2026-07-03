@@ -22,6 +22,7 @@ from salutebot.alerts import (
     Mailer,
     MailerError,
     fan_out,
+    render_dead_man_notice,
     render_nre_invalid_notice,
     render_watch_failing_notice,
 )
@@ -30,6 +31,14 @@ from salutebot.scraper.base import NREInvalidError, Scraper, ScrapeError, Scrape
 from salutebot.store import Store
 
 _DEFAULT_LOCK_PATH = "/tmp/salute-bot.lock"
+_DEFAULT_HEARTBEAT_PATH = "/tmp/salute-bot.heartbeat"
+
+# Dead-man (D11). The daemon rewrites the heartbeat at the top of every loop pass;
+# an EXTERNAL checker (systemd/cron, Phase 5) reads it and, if older than this,
+# broadcasts that the watcher is down. Must exceed the longest loop gap — the idle
+# sleep is FLOOR_SECONDS (120s) — so a healthy-but-idle daemon is never mistaken
+# for dead; 300s leaves generous margin.
+HEARTBEAT_MAX_AGE = 300.0
 
 # The politeness floor (D22): a single prestazione is scraped at most once per this
 # many seconds, by the loop or by --check-now. Also the idle re-check interval when
@@ -204,6 +213,41 @@ def _notify_watch_failing(store: Store, mailer: Mailer, code: str) -> None:
             pass
 
 
+# ----- dead-man heartbeat (D11) -----
+
+
+def write_heartbeat(path: str, now: float) -> None:
+    """Record the daemon is alive at `now` (D11). Written atomically (temp + rename)
+    so an external reader never sees a torn value."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        handle.write(str(now))
+    os.replace(tmp, path)
+
+
+def heartbeat_is_stale(path: str, now: float, max_age: float = HEARTBEAT_MAX_AGE) -> bool:
+    """True if the watcher looks dead: the heartbeat is older than `max_age`, or
+    missing/unreadable entirely (D11). A pure primitive for the external checker."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            last = float(handle.read().strip())
+    except (OSError, ValueError):
+        return True
+    return (now - last) > max_age
+
+
+def notify_watcher_down(store: Store, mailer: Mailer) -> None:
+    """Broadcast the dead-man notice to every user (D11). Called by the external
+    checker (not the daemon — it's the one that died); best-effort per recipient.
+    The 'once per outage' de-dup is the checker's concern (Phase 5), not here."""
+    notice = render_dead_man_notice()
+    for email in store.all_user_emails():
+        try:
+            mailer.send(email, notice)
+        except MailerError:
+            pass
+
+
 def seconds_until_next_due(store: Store, now: float) -> float | None:
     """How long to sleep before any prestazione is next due (D21/D22).
 
@@ -228,19 +272,21 @@ def run(
     mailer: Mailer,
     *,
     lock_path: str = _DEFAULT_LOCK_PATH,
+    heartbeat_path: str = _DEFAULT_HEARTBEAT_PATH,
     clock=time.time,
     sleep=time.sleep,
 ) -> None:
     """The daemon's self-clocking serial loop (D21/D22/D27). Holds the single-
-    instance flock for its whole life (D27), sweeps, then sleeps exactly until the
-    next prestazione is due — no fixed timer (D21). Runs until interrupted; `clock`
-    and `sleep` are injected so the cadence is testable without real time."""
+    instance flock for its whole life (D27), emits a heartbeat (D11), sweeps, then
+    sleeps exactly until the next prestazione is due — no fixed timer (D21). Runs
+    until interrupted; `clock`/`sleep` are injected so the cadence is testable."""
     # Consecutive-failure counts persist across sweeps for the whole daemon life
     # (D11). In-memory, like D26's in-flight set: a crash resets them, which is
     # harmless (systemd restarts, and the streak simply restarts too).
     failure_counts: dict[str, int] = {}
     with single_instance_lock(lock_path):
         while True:
+            write_heartbeat(heartbeat_path, clock())  # liveness for the dead-man (D11)
             run_sweep(store, scraper, mailer, clock(), failure_counts=failure_counts, sleep=sleep)
             wait = seconds_until_next_due(store, clock())
             sleep(FLOOR_SECONDS if wait is None else wait)

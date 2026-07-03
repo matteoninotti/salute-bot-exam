@@ -273,8 +273,9 @@ class _Stop(Exception):
     pass
 
 
-def test_run_sweeps_then_sleeps_until_next_due(store, tmp_path):
+def test_run_sweeps_writes_heartbeat_then_sleeps_until_next_due(store, tmp_path):
     scraper = _FakeScraper(ScrapeResult(_PREST, [_slot()]))
+    heartbeat = tmp_path / "hb"
     slept: list[float] = []
 
     def fake_sleep(seconds):
@@ -283,7 +284,8 @@ def test_run_sweeps_then_sleeps_until_next_due(store, tmp_path):
 
     with pytest.raises(_Stop):
         run(store, scraper, _FakeMailer(), lock_path=str(tmp_path / "d.lock"),
-            clock=lambda: 1000.0, sleep=fake_sleep)
+            heartbeat_path=str(heartbeat), clock=lambda: 1000.0, sleep=fake_sleep)
 
     assert len(scraper.calls) == 1               # one sweep happened
     assert slept == [FLOOR_SECONDS]              # then slept exactly one floor (just scraped)
+    assert heartbeat.read_text() == "1000.0"     # liveness emitted before the sweep (D11)

@@ -55,6 +55,10 @@ class Store:
     def user_exists(self, cf: str) -> bool:
         return self.__row("SELECT 1 FROM users WHERE cf_hash = ?", (self.__crypto.hash_cf(cf),)) is not None
 
+    def all_user_emails(self) -> list[str]:
+        """Every registered user's email — the dead-man broadcast set (D11)."""
+        return [r["email"] for r in self.__rows("SELECT email FROM users", ())]
+
     def get_email(self, cf: str) -> str | None:
         row = self.__row("SELECT email FROM users WHERE cf_hash = ?", (self.__crypto.hash_cf(cf),))
         return row["email"] if row else None
