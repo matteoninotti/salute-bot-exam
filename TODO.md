@@ -27,15 +27,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 - [x] **(M)** Detector: per-prestazione dedup (D8/D20) — `new = current − known` in memory, `last_seen` bumped on present keys; `first_seen` persisted post-send by the fan-out (D36), not by the detector
 - [x] **(M)** Alert fan-out: `slots(new) → targets → users` join; SES email adapter (D10/D15); at-least-once send-then-persist (D36); D32 email (full set, new highlighted)
 - [x] **(M)** CLI management commands (D37): `-u [CF]` (optional, prompt when omitted), `--list`, `--disable` (numbered menu, D35), `--disable-all`, `--delete-user` (erases user rows only, shared `slots` kept per D20), returning-user menu — no-scrape surface (D27), injected-I/O testable
-- [ ] **(M)** CLI new-user registration + add-prestazione (D14): needs the daemon-driven acknowledgment scrape (NRE→prestazione + initial slots) — blocked on Phase 3 daemon per D27; build when the request mechanism is pinned
-- [ ] **(M)** `--check-now`: CLI-owned cooldown + block-poll (D24/D26); daemon serving via two timestamps
-
 ## Phase 3 — daemon / service
 
-- [ ] **(M)** Self-clocking serial loop, N=1 worker pool (D21/D22/D27); 2-min per-prestazione floor
-- [ ] **(M)** `flock` single-instance guard (D27); systemd-friendly long-running process
-- [ ] **(M)** Robustness: retry + backoff on JSF errors, N=3 consecutive fails → notify user; dead-man alert (D11)
+- [x] **(M)** Scraper seam (Protocol + `ScrapeResult` + typed `NREInvalidError` vs transient `ScrapeError`) so the daemon is testable with a fake before the Phase 4 drive exists (D5/D14/D28)
+- [x] **(M)** `flock` single-instance guard (D27); systemd-friendly long-running process
+- [ ] **(M)** Self-clocking serial loop, N=1 worker pool (D21/D22/D27); 2-min per-prestazione floor; two-tier queue + coalescing (D25)
 - [ ] **(M)** Representative-NRE lifecycle (D28): first active target drives; rotate on permanent NRE-invalid; email owner; prestazione dormant if none valid
+- [ ] **(M)** Robustness: retry + backoff on JSF errors, N=3 consecutive fails → notify user; dead-man alert (D11)
+- [ ] **(M)** `--check-now` end-to-end (D24/D26): CLI-owned cooldown + block-poll; daemon serving via the two `users` timestamps  _(moved from Phase 2 — needs the daemon)_
+- [ ] **(M)** New-user registration + add-prestazione (D14): daemon-driven acknowledgment scrape (NRE→prestazione + initial slots); pin the CLI→daemon request mechanism  _(moved from Phase 2 — needs the daemon, D27)_
 
 ## Phase 4 — live drive (riskiest, needs valid NRE)
 
