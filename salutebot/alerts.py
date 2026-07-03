@@ -75,10 +75,17 @@ class Mailer(Protocol):
         ...
 
 
+class SesClient(Protocol):
+    """The slice of boto3's SES client `SesMailer` actually calls -- boto3 ships no
+    stubs, so `object` would hide this contract from callers/tests entirely."""
+
+    def send_email(self, *, Source: str, Destination: dict, Message: dict) -> dict: ...
+
+
 class SesMailer:
     """Sends alert emails via AWS SES (D10/D15). Attributes private (encapsulation)."""
 
-    def __init__(self, sender: str, client: object) -> None:
+    def __init__(self, sender: str, client: SesClient) -> None:
         # `sender` must be an SES-verified address in sandbox (D15); `client` is a
         # boto3 SES client, injected so tests need no AWS.
         self.__sender = sender
