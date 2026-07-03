@@ -25,7 +25,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from html import escape
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -34,12 +34,15 @@ from salutebot.models import DetectionResult, Slot
 from salutebot.store import Store
 
 
+
 class MailerError(RuntimeError):
     """A single email send failed at the transport level (wraps the SES error)."""
 
 
+
 class MailerConfigError(RuntimeError):
     """Required mailer configuration (e.g. the verified sender) is missing."""
+
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,7 @@ class EmailContent:
     subject: str
     text: str
     html: str
+
 
 
 @dataclass(frozen=True)
@@ -67,6 +71,7 @@ class FanOutResult:
     persisted: bool
 
 
+
 class Mailer(Protocol):
     """The seam the fan-out depends on -- `SesMailer` in prod, a fake in tests."""
 
@@ -75,11 +80,15 @@ class Mailer(Protocol):
         ...
 
 
+
 class SesClient(Protocol):
     """The slice of boto3's SES client `SesMailer` actually calls -- boto3 ships no
     stubs, so `object` would hide this contract from callers/tests entirely."""
 
-    def send_email(self, *, Source: str, Destination: dict, Message: dict) -> dict: ...
+    def send_email(self, *, Source: str, Destination: dict[str, Any],
+                   Message: dict[str, Any]) -> dict[str, Any]:
+        ...
+
 
 
 class SesMailer:
@@ -102,8 +111,7 @@ class SesMailer:
         if not sender:
             raise MailerConfigError(
                 "SALUTEBOT_SENDER_EMAIL is not set -- SES needs a verified sender "
-                "address (sandbox, D15). Set it before sending alerts."
-            )
+                "address (sandbox, D15). Set it before sending alerts.")
         kwargs: dict[str, str] = {}
         region = source.get("SALUTEBOT_AWS_REGION") or source.get("AWS_REGION")
         if region:
@@ -111,7 +119,10 @@ class SesMailer:
         endpoint = source.get("SALUTEBOT_SES_ENDPOINT")
         if endpoint:
             kwargs["endpoint_url"] = endpoint
-        return cls(sender, boto3.client("ses", **kwargs))
+        # botocore generates `send_email` dynamically, so the client doesn't
+        # statically satisfy SesClient though it does at runtime -- cast at this one
+        # boto3 boundary rather than weaken the Protocol that keeps `send` type-safe.
+        return cls(sender, cast(SesClient, boto3.client("ses", **kwargs)))
 
     def send(self, to_addr: str, content: EmailContent) -> None:
         try:
@@ -119,21 +130,33 @@ class SesMailer:
                 Source=self.__sender,
                 Destination={"ToAddresses": [to_addr]},
                 Message={
-                    "Subject": {"Data": content.subject, "Charset": "UTF-8"},
+                    "Subject": {
+                        "Data": content.subject,
+                        "Charset": "UTF-8"
+                    },
                     "Body": {
-                        "Text": {"Data": content.text, "Charset": "UTF-8"},
-                        "Html": {"Data": content.html, "Charset": "UTF-8"},
+                        "Text": {
+                            "Data": content.text,
+                            "Charset": "UTF-8"
+                        },
+                        "Html": {
+                            "Data": content.html,
+                            "Charset": "UTF-8"
+                        },
                     },
                 },
             )
         except (BotoCoreError, ClientError) as exc:
             # No recipient in the message: keep addresses out of error text/logs.
-            raise MailerError(f"SES send failed: {type(exc).__name__}") from exc
+            raise MailerError(
+                f"SES send failed: {type(exc).__name__}") from exc
 
 
-def fan_out(
-    store: Store, mailer: Mailer, result: DetectionResult, now: float | None = None
-) -> FanOutResult:
+
+def fan_out(store: Store,
+            mailer: Mailer,
+            result: DetectionResult,
+            now: float | None = None) -> FanOutResult:
     """Email every active subscriber of the prestazione, then persist (D20/D36).
 
     Ordering is D36's at-least-once: send first, record the new slots only if the
@@ -163,10 +186,14 @@ def fan_out(
             failed = True
 
     if failed:
-        return FanOutResult(recipients=len(recipients), sent=sent, persisted=False)
+        return FanOutResult(recipients=len(recipients),
+                            sent=sent,
+                            persisted=False)
 
-    store.record_new_slots(result.prestazione, result.new_slots, now)  # post-send (D36)
+    store.record_new_slots(result.prestazione, result.new_slots,
+                           now)  # post-send (D36)
     return FanOutResult(recipients=len(recipients), sent=sent, persisted=True)
+
 
 
 def render_alert(result: DetectionResult) -> EmailContent:
@@ -190,7 +217,8 @@ def render_alert(result: DetectionResult) -> EmailContent:
     html_items = []
     for slot in result.all_slots:
         is_new = slot.slot_key in new_keys
-        text_lines.append(("  >>> " if is_new else "      ") + _slot_line(slot))
+        text_lines.append(("  >>> " if is_new else "      ") +
+                          _slot_line(slot))
         if is_new:
             html_items.append(
                 f'<li style="background:#fff3cd;font-weight:bold">'
@@ -203,9 +231,9 @@ def render_alert(result: DetectionResult) -> EmailContent:
         f"<p>{escape(posti.capitalize())} per <strong>{escape(desc)}</strong> "
         f"({escape(result.prestazione)}).</p>"
         f'<p>Disponibilità attuale (i nuovi sono evidenziati):</p>'
-        f"<ul>{''.join(html_items)}</ul>"
-    )
+        f"<ul>{''.join(html_items)}</ul>")
     return EmailContent(subject=subject, text="\n".join(text_lines), html=html)
+
 
 
 def _slot_line(slot: Slot) -> str:
