@@ -24,9 +24,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 
 - [x] **(M)** Store: SQLite schema — 4 tables `users`/`targets`/`prestazioni`/`slots` (D20) + `users.checknow_requested_at`/`last_checknow_at` (D26)
 - [x] **(M)** Crypto layer (D29): `cf_hash = HMAC-SHA256(cf, hmac_key)` blind index (PK/FK); `cf_enc`/`nre` AEAD; two separate env keys
-- [x] **(M)** Detector: per-prestazione dedup (D8/D20) — `new = current − known` in memory, `first_seen` written once, `last_seen` bumped
+- [x] **(M)** Detector: per-prestazione dedup (D8/D20) — `new = current − known` in memory, `last_seen` bumped on present keys; `first_seen` persisted post-send by the fan-out (D36), not by the detector
 - [x] **(M)** Alert fan-out: `slots(new) → targets → users` join; SES email adapter (D10/D15); at-least-once send-then-persist (D36); D32 email (full set, new highlighted)
-- [x] **(M)** CLI management commands: `-u [CF]` (optional, prompt when omitted), `--list`, `--disable` (numbered menu, D35), `--disable-all`, `--delete-user`, returning-user menu — no-scrape surface (D27), injected-I/O testable
+- [x] **(M)** CLI management commands (D37): `-u [CF]` (optional, prompt when omitted), `--list`, `--disable` (numbered menu, D35), `--disable-all`, `--delete-user` (erases user rows only, shared `slots` kept per D20), returning-user menu — no-scrape surface (D27), injected-I/O testable
 - [ ] **(M)** CLI new-user registration + add-prestazione (D14): needs the daemon-driven acknowledgment scrape (NRE→prestazione + initial slots) — blocked on Phase 3 daemon per D27; build when the request mechanism is pinned
 - [ ] **(M)** `--check-now`: CLI-owned cooldown + block-poll (D24/D26); daemon serving via two timestamps
 
