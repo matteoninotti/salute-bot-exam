@@ -33,14 +33,14 @@ def main(argv: list[str] | None = None, *, store: Store | None = None,
          read=input, write=print) -> None:
     """Entry point. Builds a real `Store` from env unless one is injected (tests)."""
     args = _build_parser().parse_args(argv)
-    own_store = store is None
-    if own_store:
-        store = Store(os.environ.get(_DB_PATH_VAR, _DEFAULT_DB), Crypto.from_env(EnvConfig()))
+    if store is not None:
+        _dispatch(args, store, read, write)  # injected (tests) — caller owns its lifecycle
+        return
+    owned = Store(os.environ.get(_DB_PATH_VAR, _DEFAULT_DB), Crypto.from_env(EnvConfig()))
     try:
-        _dispatch(args, store, read, write)
+        _dispatch(args, owned, read, write)
     finally:
-        if own_store:
-            store.close()
+        owned.close()  # only close the store we created
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -12,3 +12,24 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py314"
 line-length = 100
+
+[tool.mypy]
+python_version = "3.14"
+files = ["salutebot"]
+# Default (non-strict) level: catches real type errors — the class of bug that
+# slipped in (dict vs Mapping, object-typed client, bare generics) — without the
+# no-untyped-def noise on BeautifulSoup element helpers. Tighten per-module toward
+# --strict as modules are annotated.
+
+[[tool.mypy.overrides]]
+# These third-party libs ship no (usable) type stubs; silence just them, not our code.
+module = ["boto3.*", "botocore.*", "bs4.*"]
+ignore_missing_imports = true
+
+[tool.pyright]
+include = ["salutebot"]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
+# Resolve imports against the project venv (created locally and in CI as `.venv`).
+venvPath = "."
+venv = ".venv"
