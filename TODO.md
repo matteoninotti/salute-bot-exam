@@ -51,7 +51,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 - [ ] **(M)** CI: GitHub ubuntu-amd64 runner + LocalStack; one real-AWS SES smoke to a verified address (D15)
 - [ ] **(S)** systemd service unit (`Restart=always`, D21)
 - [ ] **(S)** EC2 t3.small (amd64) 24/7 deploy (D13)
-- [x] **(S)** Rebuild the PRD doc from log D1–D29 + feasibility (only doc not yet rebuilt)
+- [x] **(S)** Rebuild the PRD doc from log D1–D30 + feasibility (only doc not yet rebuilt)
 
 ## Backlog — Should / Could / Won't-this-MVP
 
