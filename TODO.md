@@ -26,7 +26,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 - [x] **(M)** Crypto layer (D29): `cf_hash = HMAC-SHA256(cf, hmac_key)` blind index (PK/FK); `cf_enc`/`nre` AEAD; two separate env keys
 - [x] **(M)** Detector: per-prestazione dedup (D8/D20) — `new = current − known` in memory, `first_seen` written once, `last_seen` bumped
 - [x] **(M)** Alert fan-out: `slots(new) → targets → users` join; SES email adapter (D10/D15); at-least-once send-then-persist (D36); D32 email (full set, new highlighted)
-- [ ] **(M)** CLI client: registration (new/returning user, D14), `-u [CF]`, `--list`, `--disable [NRE]`, `--disable-all`, `--delete-user`
+- [ ] **(M)** CLI client: registration (new/returning user, D14), `-u [CF]` (value optional, prompt when omitted), `--list`, `--disable` (numbered menu by prestazione, no secret in argv — D35), `--disable-all`, `--delete-user`
 - [ ] **(M)** `--check-now`: CLI-owned cooldown + block-poll (D24/D26); daemon serving via two timestamps
 
 ## Phase 3 — daemon / service
@@ -51,7 +51,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 - [ ] **(M)** CI: GitHub ubuntu-amd64 runner + LocalStack; one real-AWS SES smoke to a verified address (D15)
 - [ ] **(S)** systemd service unit (`Restart=always`, D21)
 - [ ] **(S)** EC2 t3.small (amd64) 24/7 deploy (D13)
-- [x] **(S)** Rebuild the PRD doc from log D1–D29 + feasibility (only doc not yet rebuilt)
+- [x] **(S)** Rebuild the PRD doc from log D1–D30 + feasibility (only doc not yet rebuilt)
 
 ## Backlog — Should / Could / Won't-this-MVP
 
