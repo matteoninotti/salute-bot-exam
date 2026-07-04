@@ -64,6 +64,9 @@ _SLOT_CARD = "div.disponibiliPanel"                          # one slot card (wh
 # Short settle between the two proceed clicks — long enough for the ICEfaces input
 # validation to finish, short enough not to reintroduce the old ~30 s wait.
 _PROCEED_SETTLE_MS = 5000
+# The post-extend warning dialog is usually ABSENT; when it appears it does so at once.
+# So poll it only briefly (a full action-window wait here just burns ~10 s per scrape).
+_DIALOG_WAIT_MS = 2000
 
 
 def _sel(element_id: str) -> str:
@@ -214,7 +217,8 @@ class LiveScraper:
         extended = self.__click_if_present(page, page.locator(_sel(_NEXT_AREA)))
         self.__log(f"'estendi area' (nextArea): {'clicked' if extended else 'not found'}")
         if extended:
-            dialog = self.__click_if_present(page, page.locator(_sel(_WARNING_CONFIRM)))
+            dialog = self.__click_if_present(page, page.locator(_sel(_WARNING_CONFIRM)),
+                                             timeout_ms=_DIALOG_WAIT_MS)
             self.__log(f"warning dialog: {'confirmed' if dialog else 'none'}")
 
     def __await_slot_cards(self, page) -> None:
@@ -230,12 +234,13 @@ class LiveScraper:
     def __card_count(self, page) -> int:
         return page.locator(f"{_sel(_SLOTS_CONTAINER)} {_SLOT_CARD}").count()
 
-    def __click_if_present(self, page, locator) -> bool:
-        """Click the first match if it becomes visible within the short action window;
-        return whether it was clicked. Used for the conditional extend-area controls."""
+    def __click_if_present(self, page, locator, timeout_ms: int | None = None) -> bool:
+        """Click the first match if it becomes visible within the given window (default the
+        action window); return whether it was clicked. Used for the conditional
+        proceed/extend-area/dialog controls."""
         target = locator.first
         try:
-            target.wait_for(state="visible", timeout=self.__action_ms)
+            target.wait_for(state="visible", timeout=timeout_ms or self.__action_ms)
         except PlaywrightTimeoutError:
             return False
         target.click()

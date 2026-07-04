@@ -40,9 +40,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 
 ## Phase 4 — live drive (riskiest, needs valid NRE)
 
-- [~] **(M)** Scraper drive (D42): `LiveScraper` — Playwright headless Chromium through the stateful JSF flow (seed → form → visible "Avanti"/`nreButton` → epPrestazioni → "Avanti" → `nextArea` widest area → harvest `availableAppointmentsContainer`); browser harvests ViewState/p_auth/ice.* itself. Selectors grounded in `flow.har` + live form DOM; form-page selectors live-verified (no secrets); dynamic points marked `SMOKE-CONFIRM`
-- [ ] **(M)** Live smoke run (Matteo, local, secrets via env/stdin): `python -m salutebot.scraper.drive` — confirm the full flow end-to-end; tune the SMOKE-CONFIRM points (proceed 1× vs 2×, warning dialog, settle wait)
-- [x] NRE input box count = 1 (§3/D42). — [ ] exact "NRE invalid" wire signal (D28): capture from the physical dead ricetta in the smoke run → wire `_check_invalid_nre` (rotation dormant until then)
+- [x] **(M)** Scraper drive (D42): `LiveScraper` — Playwright headless Chromium through the stateful JSF flow (seed → form → **two-click** proceed/`nreButton` → epPrestazioni → "Avanti" → `altre disponibilità` → `estendi area`/`nextArea` → harvest `availableAppointmentsContainer`); browser harvests ViewState/p_auth/ice.* itself. **Confirmed working end-to-end 2026-07-04** against a real ricetta (14 slots harvested + parsed); SMOKE-CONFIRM points resolved (proceed = 2 clicks; altre-disp→estendi both fire; warning dialog absent → wait trimmed)
+- [x] **(M)** Live smoke run — valid ricetta full flow confirmed (`python -m salutebot.scraper.drive`, ~28–36 s/scrape: ~17 s of it is the CUP loading the slots page). — [ ] dead-ricetta run still pending for the invalid signal (below)
+- [x] NRE input box count = 1, format = 15-char (§3/D42). — [ ] exact "NRE invalid" wire signal (D28): capture from the physical dead ricetta → wire `_check_invalid_nre` (rotation dormant until then)
 - [ ] **(C)** HAR-replay harness for offline drive testing (`recon/flow.har`)
 
 ## Phase 5 — demo / ship
