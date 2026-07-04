@@ -10,6 +10,7 @@ from cryptography.fernet import Fernet
 
 from salutebot.crypto import Crypto
 from salutebot.daemon import (
+    CHECKNOW_POLL_INTERVAL,
     FAILURE_NOTIFY_THRESHOLD,
     FLOOR_SECONDS,
     RETRY_ATTEMPTS,
@@ -17,6 +18,7 @@ from salutebot.daemon import (
     run,
     run_sweep,
     seconds_until_next_due,
+    serve_checknow,
 )
 from salutebot.models import Prestazione, Slot
 from salutebot.scraper.base import NREInvalidError, ScrapeError, ScrapeResult
@@ -267,6 +269,49 @@ def test_next_due_is_none_when_nothing_is_watched(store):
     assert seconds_until_next_due(store, now=1000.0) is None
 
 
+# ----- serve_checknow (D24/D26/D39) -----
+
+def test_serve_checknow_scrapes_users_codes_and_marks_done(store):
+    scraper = _FakeScraper(ScrapeResult(_PREST, [_slot()]))
+    store.accept_checknow(_CF, now=1000.0)
+    serve_checknow(store, scraper, _FakeMailer(), now=1000.0, in_flight=set(),
+                   failure_counts={}, sleep=lambda _s: None)
+    assert scraper.calls == [(_CF, _NRE_A)]                       # the user's code scraped
+    assert store.checknow_served_since(_CF, request_ts=1000.0) is True  # CLI unblocks
+    assert store.known_slot_keys(_CODE) == {_slot().slot_key}
+
+
+def test_serve_checknow_reuses_a_within_floor_code(store):
+    # The sweep just claimed this code, so the check-now claim loses (D23/D39): no
+    # re-scrape, but the request still completes so the blocking CLI unblocks.
+    store.claim_prestazione(_CODE, now=1000.0, floor=FLOOR_SECONDS)
+    scraper = _FakeScraper(ScrapeResult(_PREST, [_slot()]))
+    store.accept_checknow(_CF, now=1000.0)
+    serve_checknow(store, scraper, _FakeMailer(), now=1000.0 + 1, in_flight=set(),
+                   failure_counts={}, sleep=lambda _s: None)
+    assert scraper.calls == []                                    # reused, not re-scraped
+    assert store.checknow_served_since(_CF, request_ts=1000.0) is True
+
+
+def test_serve_checknow_completes_even_when_the_scrape_fails(store):
+    # D26: last_checknow_at is set regardless of outcome, so the CLI never hangs.
+    scraper = _FakeScraper(raises=ScrapeError("x"))
+    store.accept_checknow(_CF, now=1000.0)
+    serve_checknow(store, scraper, _FakeMailer(), now=1000.0, in_flight=set(),
+                   failure_counts={}, sleep=lambda _s: None)
+    assert store.checknow_served_since(_CF, request_ts=1000.0) is True
+
+
+def test_serve_checknow_skips_a_user_already_in_flight(store):
+    store.accept_checknow(_CF, now=1000.0)
+    cf_hash = store._Store__crypto.hash_cf(_CF)
+    scraper = _FakeScraper(ScrapeResult(_PREST, [_slot()]))
+    serve_checknow(store, scraper, _FakeMailer(), now=1000.0, in_flight={cf_hash},
+                   failure_counts={}, sleep=lambda _s: None)
+    assert scraper.calls == []                                    # already running -> skipped
+    assert store.checknow_served_since(_CF, request_ts=1000.0) is False
+
+
 # ----- run (one iteration, broken out via sleep) -----
 
 class _Stop(Exception):
@@ -287,5 +332,7 @@ def test_run_sweeps_writes_heartbeat_then_sleeps_until_next_due(store, tmp_path)
             heartbeat_path=str(heartbeat), clock=lambda: 1000.0, sleep=fake_sleep)
 
     assert len(scraper.calls) == 1               # one sweep happened
-    assert slept == [FLOOR_SECONDS]              # then slept exactly one floor (just scraped)
+    # Next prestazione is a floor away, but the idle sleep is capped so the check-now
+    # lane is polled within ~POLL_INTERVAL (D39), not a whole floor.
+    assert slept == [CHECKNOW_POLL_INTERVAL]
     assert heartbeat.read_text() == "1000.0"     # liveness emitted before the sweep (D11)

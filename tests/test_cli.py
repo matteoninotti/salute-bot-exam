@@ -145,6 +145,42 @@ def test_delete_user_aborts_on_cf_mismatch(store):
     assert store.user_exists(_CF) is True
 
 
+# ----- --check-now (D24/D26) -----
+
+def _boom_sleep(_seconds):
+    raise AssertionError("check-now must not block while on cooldown")
+
+
+def test_check_now_queues_then_prints_results_when_served(store):
+    store.record_new_slots(_CODE, [_slot()], now=900.0)  # slots already present
+    out = _Writer()
+
+    # A stand-in daemon: the first block-poll sleep marks the request complete, so
+    # the CLI unblocks on its next check and prints the user's slots (D24).
+    def fake_sleep(_seconds):
+        store.mark_checknow_done(store._Store__crypto.hash_cf(_CF), now=1001.0)
+
+    main(["-u", _CF, "--check-now"], store=store, read=_scripted(), write=out,
+         clock=lambda: 1000.0, sleep=fake_sleep)
+
+    assert "queued" in out.text.lower()
+    assert "2026-06-22" in out.text and "MONGINEVRO" in out.text  # results after completion
+    assert store._Store__conn.execute(
+        "SELECT checknow_requested_at FROM users WHERE cf_hash = ?",
+        (store._Store__crypto.hash_cf(_CF),)).fetchone()[0] == 1000.0  # fire recorded
+
+
+def test_check_now_on_cooldown_prints_only_remaining(store):
+    store.accept_checknow(_CF, now=1000.0)  # a recent accepted fire
+    out = _Writer()
+
+    main(["-u", _CF, "--check-now"], store=store, read=_scripted(), write=out,
+         clock=lambda: 1100.0, sleep=_boom_sleep)  # 100s later -> 200s remaining
+
+    assert "cooldown" in out.text.lower() and "200s" in out.text
+    assert "queued" not in out.text.lower()  # rejected: no request, no block (D24)
+
+
 # ----- registration (deferred, D27) -----
 
 def test_new_user_registration_is_deferred(store):

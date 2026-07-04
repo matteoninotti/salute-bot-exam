@@ -45,6 +45,12 @@ HEARTBEAT_MAX_AGE = 300.0
 # nothing is being watched.
 FLOOR_SECONDS = 120.0
 
+# The idle sleep is capped at this (D39/Finding 3): the loop wakes at least this often
+# to serve the check-now lane, so a block-polling CLI (D24) is answered within ~this
+# many seconds instead of waiting up to a whole floor. Cheap — an idle tick is a couple
+# of SQLite reads, no scrape.
+CHECKNOW_POLL_INTERVAL = 2.0
+
 # N=1 (D27): one prestazione scraped at a time. Kept as a named constant because
 # D27 wants raising N later to be a one-line change once a global rate cap exists —
 # it is NOT an invitation to add workers now (extra workers only raise concurrent
@@ -103,12 +109,15 @@ def process_prestazione(
     stops the attempt, or none remain and the prestazione is **dormant** (D28). Each
     scrape rides out momentary JSF glitches via in-attempt retry + backoff (D11).
 
-    Politeness (D22): the attempt is marked (`last_scrape_at = now`) once, before the
-    first scrape, so a failure/crash still counts against the 2-min floor and the
-    loop can never busy-scrape a broken prestazione. A prestazione with no active
-    credential at all is dormant and marks nothing. On success, detection (D8) +
-    fan-out (D32/D36/D38) run. The `transient_error` status feeds the across-sweep
-    consecutive-failure counter in `run_sweep` (N=3 → notify, D11).
+    Politeness (D22) + concurrency (D39): the first scrape is gated by an **atomic
+    claim** (`claim_prestazione`) that advances `last_scrape_at` once and confirms no
+    other worker holds the 2-min floor window — so a failure/crash still counts
+    against the floor (no busy-scraping a broken prestazione) and, at N>1, two workers
+    can never scrape the same code. A lost claim returns `"skipped_floor"` (scraped
+    recently — stored slots stand); a prestazione with no active credential is
+    `"dormant"` and marks nothing. On success, detection (D8) + fan-out (D32/D36/D38)
+    run. The `transient_error` status feeds the across-sweep consecutive-failure
+    counter in `run_sweep` (N=3 → notify, D11); `"skipped_floor"` is neutral to it.
     """
     marked = False
     while True:
@@ -116,7 +125,12 @@ def process_prestazione(
         if credential is None:
             return "dormant"  # no active NRE left (or ever) — skip until one is added
         if not marked:
-            store.set_last_scrape_at(code, now)
+            # Atomically claim the 2-min floor (D22) window: winning both advances
+            # `last_scrape_at` and guarantees no other worker scrapes this code in
+            # the same window (N>1-safe coalescing, D39). A lost claim = someone
+            # already scraped it recently, so the stored slots stand.
+            if not store.claim_prestazione(code, now, FLOOR_SECONDS):
+                return "skipped_floor"
             marked = True
         cf, nre = credential
         try:
@@ -198,8 +212,10 @@ def _record_cycle_outcome(
         counts[code] = counts.get(code, 0) + 1
         if counts[code] == FAILURE_NOTIFY_THRESHOLD:
             _notify_watch_failing(store, mailer, code)
-    else:  # ok / dormant — the streak of transient failures is broken
+    elif status in ("ok", "dormant"):  # a real outcome — the transient streak is broken
         counts.pop(code, None)
+    # "skipped_floor": not scraped this cycle (within floor / lost claim) — neutral,
+    # neither a failure nor a success, so the streak is left untouched (D39).
 
 
 def _notify_watch_failing(store: Store, mailer: Mailer, code: str) -> None:
@@ -211,6 +227,34 @@ def _notify_watch_failing(store: Store, mailer: Mailer, code: str) -> None:
             mailer.send(email, notice)
         except MailerError:
             pass
+
+
+# ----- check-now lane (D24/D26/D39) -----
+
+
+def serve_checknow(
+    store: Store, scraper: Scraper, mailer: Mailer, now: float,
+    *, in_flight: set[str], failure_counts: dict[str, int], sleep=time.sleep,
+) -> None:
+    """Serve outstanding `--check-now` requests, ahead of the sweep (D25/D26).
+
+    For each user with a fire newer than their last completion, scrape each of their
+    active prestazioni (`process_prestazione`, so a code the sweep just hit is reused
+    via the claim, not re-scraped — D23/D39), then set `last_checknow_at = now` so the
+    blocking CLI unblocks — **even on scrape failure** (failure is coarse; the CLI
+    prints whatever slots exist, D26). `in_flight` (owned by `run`, in memory per D26)
+    guards against re-picking a request already being served; a crash just re-runs it."""
+    for cf_hash, codes in store.outstanding_checknow():
+        if cf_hash in in_flight:
+            continue
+        in_flight.add(cf_hash)
+        try:
+            for code in codes:
+                status = process_prestazione(store, scraper, mailer, code, now, sleep=sleep)
+                _record_cycle_outcome(store, mailer, failure_counts, code, status)
+            store.mark_checknow_done(cf_hash, now)
+        finally:
+            in_flight.discard(cf_hash)
 
 
 # ----- dead-man heartbeat (D11) -----
@@ -277,16 +321,23 @@ def run(
     sleep=time.sleep,
 ) -> None:
     """The daemon's self-clocking serial loop (D21/D22/D27). Holds the single-
-    instance flock for its whole life (D27), emits a heartbeat (D11), sweeps, then
-    sleeps exactly until the next prestazione is due — no fixed timer (D21). Runs
-    until interrupted; `clock`/`sleep` are injected so the cadence is testable."""
-    # Consecutive-failure counts persist across sweeps for the whole daemon life
-    # (D11). In-memory, like D26's in-flight set: a crash resets them, which is
-    # harmless (systemd restarts, and the streak simply restarts too).
+    instance flock for its whole life (D27), emits a heartbeat (D11), serves the
+    check-now lane then sweeps (D25/D39), and sleeps until the next prestazione is
+    due — capped at `CHECKNOW_POLL_INTERVAL` so an interactive check-now is answered
+    promptly (D39). Runs until interrupted; `clock`/`sleep` are injected for tests."""
+    # Consecutive-failure counts + the check-now in-flight set persist across ticks
+    # for the whole daemon life. In-memory (D11/D26): a crash resets them, which is
+    # harmless (systemd restarts, and the streak / in-flight simply restart too).
     failure_counts: dict[str, int] = {}
+    in_flight: set[str] = set()
     with single_instance_lock(lock_path):
         while True:
             write_heartbeat(heartbeat_path, clock())  # liveness for the dead-man (D11)
+            serve_checknow(store, scraper, mailer, clock(), in_flight=in_flight,
+                           failure_counts=failure_counts, sleep=sleep)  # lane first (D25)
             run_sweep(store, scraper, mailer, clock(), failure_counts=failure_counts, sleep=sleep)
             wait = seconds_until_next_due(store, clock())
-            sleep(FLOOR_SECONDS if wait is None else wait)
+            # Cap the idle sleep so the next check-now is served within ~POLL_INTERVAL,
+            # not up to a full floor (D39). None (nothing watched) → just the poll tick.
+            capped = CHECKNOW_POLL_INTERVAL if wait is None else min(wait, CHECKNOW_POLL_INTERVAL)
+            sleep(capped)

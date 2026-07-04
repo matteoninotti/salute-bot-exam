@@ -1,11 +1,12 @@
 """Terminal CLI client — the management surface over the store (D5/D14/D35).
 
-Per D27 the CLI **never scrapes**; it only reads/writes SQLite rows. So this
-module implements the commands that need no scrape: login (`-u`), `--list`,
-`--disable` (menu), `--disable-all`, `--delete-user`, and the returning-user
-display. New-user registration and adding a prestazione require the D14
-acknowledgment scrape, which per D27 is **daemon-driven** — deferred until the
-watcher daemon (Phase 3) exists.
+Per D27 the CLI **never scrapes**; it only reads/writes SQLite rows. Login (`-u`),
+`--list`, `--disable` (menu), `--disable-all`, `--delete-user`, and the returning-
+user display are pure row operations. `--check-now` also never scrapes here (D27):
+it writes a request timestamp and **blocks** until the daemon serves it (D24/D26) —
+the scrape happens in the daemon. New-user registration and adding a prestazione
+require the D14 acknowledgment scrape, which per D27 is **daemon-driven** — still
+deferred (the next Phase 3 task).
 
 Secret hygiene (D35): no secret is ever a command-line argument. `-u`'s CF value
 is **optional** (prompt when omitted, so it need not enter shell history / the
@@ -18,7 +19,9 @@ driftless to test without a TTY.
 """
 
 import argparse
+import math
 import os
+import time
 
 from salutebot.config import EnvConfig
 from salutebot.crypto import Crypto
@@ -28,17 +31,25 @@ from salutebot.validation import validate_cf
 _DB_PATH_VAR = "SALUTEBOT_DB"
 _DEFAULT_DB = "salute-bot.db"
 
+# --check-now anti-abuse throttle: a 2nd fire within this many seconds, per user,
+# is rejected (D23). Enforced CLI-side, the cooldown owner (D26).
+COOLDOWN_SECONDS = 300.0
+# How often the blocking CLI re-checks whether the daemon has served its request
+# (D24 strictly-blocking). Small; injected in tests.
+_CHECKNOW_POLL = 1.0
+
 
 def main(argv: list[str] | None = None, *, store: Store | None = None,
-         read=input, write=print) -> None:
-    """Entry point. Builds a real `Store` from env unless one is injected (tests)."""
+         read=input, write=print, clock=time.time, sleep=time.sleep) -> None:
+    """Entry point. Builds a real `Store` from env unless one is injected (tests).
+    `clock`/`sleep` back `--check-now`'s cooldown + block-poll and are injectable."""
     args = _build_parser().parse_args(argv)
     if store is not None:
-        _dispatch(args, store, read, write)  # injected (tests) — caller owns its lifecycle
+        _dispatch(args, store, read, write, clock, sleep)  # injected (tests)
         return
     owned = Store(os.environ.get(_DB_PATH_VAR, _DEFAULT_DB), Crypto.from_env(EnvConfig()))
     try:
-        _dispatch(args, owned, read, write)
+        _dispatch(args, owned, read, write, clock, sleep)
     finally:
         owned.close()  # only close the store we created
 
@@ -52,6 +63,8 @@ def _build_parser() -> argparse.ArgumentParser:
     # None. A management flag without -u also prompts, via _resolve_cf.
     parser.add_argument("-u", "--user", nargs="?", const="", default=None, metavar="CF",
                         help="log in as that CF (value optional; prompted if omitted)")
+    parser.add_argument("--check-now", action="store_true",
+                        help="ask the watcher to refresh your prestazioni now, then show results")
     parser.add_argument("--list", action="store_true",
                         help="list all slots found to date for your watched prestazioni")
     parser.add_argument("--disable", action="store_true",
@@ -63,8 +76,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _dispatch(args, store: Store, read, write) -> None:
-    if args.list:
+def _dispatch(args, store: Store, read, write, clock, sleep) -> None:
+    if args.check_now:
+        _with_user(args.user, store, read, write,
+                   lambda s, cf, w: _cmd_check_now(s, cf, w, clock=clock, sleep=sleep))
+    elif args.list:
         _with_user(args.user, store, read, write, _cmd_list)
     elif args.disable:
         _with_user(args.user, store, read, write,
@@ -121,6 +137,26 @@ def _cmd_list(store: Store, cf: str, write) -> None:
         write(f"  {row['iso_date']} {row['time']} — {where}")
 
 
+def _cmd_check_now(store: Store, cf: str, write, *, clock, sleep) -> None:
+    """Ask the daemon to refresh this user's prestazioni now, then print them (D24/D26).
+
+    The CLI owns the cooldown (D26): a 2nd fire within 5 min (D23) prints only the
+    remaining cooldown and exits — no request, no wait. Otherwise it records the fire
+    and **blocks** (D24, no email fallback) until the daemon signals completion
+    (`last_checknow_at > this request`), then shows the user's current slots. Requires
+    the watcher daemon to be running; with none, it waits (D24 is strictly blocking)."""
+    remaining = store.checknow_cooldown_remaining(cf, clock(), COOLDOWN_SECONDS)
+    if remaining > 0:
+        write(f"Check-now is on cooldown — try again in {math.ceil(remaining)}s.")
+        return
+    request_ts = clock()
+    store.accept_checknow(cf, request_ts)
+    write("Check-now queued — may take a moment...")
+    while not store.checknow_served_since(cf, request_ts):
+        sleep(_CHECKNOW_POLL)
+    _cmd_list(store, cf, write)
+
+
 def _cmd_disable(store: Store, cf: str, read, write) -> None:
     targets = store.get_user_targets(cf)
     if not targets:
@@ -173,7 +209,7 @@ def _registration(store: Store, read, write) -> None:
     # New-user onboarding needs the D14 acknowledgment scrape (NRE -> prestazione
     # + initial slots), which per D27 is daemon-driven -- not built yet (Phase 3).
     write("Registering a new user needs the watcher service, which isn't available yet.")
-    write("Available now: -u [CF], --list, --disable, --disable-all, --delete-user.")
+    write("Available now: -u [CF], --check-now, --list, --disable, --disable-all, --delete-user.")
 
 
 def _returning_user_menu(store: Store, cf: str, write) -> None:
@@ -186,7 +222,7 @@ def _returning_user_menu(store: Store, cf: str, write) -> None:
         for target in targets:
             state = "on" if target["active"] else "off"
             write(f"  {target['code']} — {target['descrizione']}  [{state}]")
-    write("Manage with: --list, --disable, --disable-all, --delete-user.")
+    write("Manage with: --check-now, --list, --disable, --disable-all, --delete-user.")
 
 
 if __name__ == "__main__":

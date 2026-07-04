@@ -185,3 +185,70 @@ def test_touch_slot_updates_last_seen_only(store):
     ).fetchone()
     assert row["first_seen"] == 1000.0  # permanent, unchanged
     assert row["last_seen"] == 2000.0
+
+
+# ----- atomic scrape claim (D39) -----
+
+_FLOOR = 120.0
+
+
+def test_claim_wins_when_never_scraped_then_loses_within_floor(store):
+    store.add_user(_CF, "a@b.it")
+    store.add_target(_CF, _PREST, _NRE)
+    # First claim wins (last_scrape_at NULL) and advances the mark to `now`.
+    assert store.claim_prestazione(_PREST.code, now=1000.0, floor=_FLOOR) is True
+    # A second claimer within the floor loses (no double-scrape, N>1-safe).
+    assert store.claim_prestazione(_PREST.code, now=1000.0 + _FLOOR - 1, floor=_FLOOR) is False
+    # last_scrape_at was set by the winner and not moved by the loser.
+    row = store._Store__conn.execute(
+        "SELECT last_scrape_at FROM prestazioni WHERE code = ?", (_PREST.code,)
+    ).fetchone()
+    assert row["last_scrape_at"] == 1000.0
+
+
+def test_claim_wins_again_once_the_floor_elapses(store):
+    store.add_user(_CF, "a@b.it")
+    store.add_target(_CF, _PREST, _NRE)
+    assert store.claim_prestazione(_PREST.code, now=1000.0, floor=_FLOOR) is True
+    assert store.claim_prestazione(_PREST.code, now=1000.0 + _FLOOR, floor=_FLOOR) is True
+
+
+# ----- check-now (D24/D26) -----
+
+def test_checknow_cooldown_and_accept(store):
+    store.add_user(_CF, "a@b.it")
+    # Never fired -> free.
+    assert store.checknow_cooldown_remaining(_CF, now=1000.0, cooldown=300.0) == 0.0
+    store.accept_checknow(_CF, now=1000.0)
+    # A 2nd fire 100s later is still on cooldown, with 200s remaining.
+    assert store.checknow_cooldown_remaining(_CF, now=1100.0, cooldown=300.0) == 200.0
+    # After the cooldown elapses, free again.
+    assert store.checknow_cooldown_remaining(_CF, now=1300.0, cooldown=300.0) == 0.0
+
+
+def test_checknow_served_since_tracks_completion(store):
+    store.add_user(_CF, "a@b.it")
+    store.accept_checknow(_CF, now=1000.0)
+    assert store.checknow_served_since(_CF, request_ts=1000.0) is False  # not served yet
+    cf_hash = store._Store__crypto.hash_cf(_CF)
+    store.mark_checknow_done(cf_hash, now=1005.0)
+    assert store.checknow_served_since(_CF, request_ts=1000.0) is True   # completion is newer
+
+
+def test_outstanding_checknow_lists_users_with_their_active_codes(store):
+    store.add_user(_CF, "a@b.it")
+    store.add_target(_CF, _PREST, _NRE)
+    store.add_target(_CF, _PREST2, _NRE)
+    store.deactivate_target(_CF, _PREST2.code)  # inactive -> excluded
+    store.add_user(_CF2, "b@b.it")              # no outstanding fire -> excluded
+    store.accept_checknow(_CF, now=1000.0)
+
+    outstanding = store.outstanding_checknow()
+
+    assert len(outstanding) == 1
+    cf_hash, codes = outstanding[0]
+    assert cf_hash == store._Store__crypto.hash_cf(_CF)
+    assert codes == [_PREST.code]               # only the active target
+    # Once served, it drops out of the outstanding set.
+    store.mark_checknow_done(cf_hash, now=1005.0)
+    assert store.outstanding_checknow() == []

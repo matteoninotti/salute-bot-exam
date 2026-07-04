@@ -175,6 +175,24 @@ class Store:
         )
         self.__conn.commit()
 
+    def claim_prestazione(self, code: str, now: float, floor: float) -> bool:
+        """Atomically claim this prestazione for a scrape, returning True iff won (D39).
+
+        One indivisible `UPDATE … WHERE last_scrape_at is NULL or aged past `floor``
+        both advances `last_scrape_at` (the D22 attempt mark) **and** reports, via
+        `rowcount`, whether *this* caller won the 2-min-floor window. Because SQLite
+        serializes writes, exactly one caller wins per prestazione per window — so a
+        worker pool (N>1, D27) can never double-scrape the same code (the losers get
+        `rowcount 0` and reuse the stored slots). Replaces the old read-then-mark,
+        whose race-freeness relied on the serial loop being single-flight."""
+        cur = self.__conn.execute(
+            "UPDATE prestazioni SET last_scrape_at = ? "
+            "WHERE code = ? AND (last_scrape_at IS NULL OR last_scrape_at <= ?)",
+            (now, code, now - floor),
+        )
+        self.__conn.commit()
+        return cur.rowcount == 1
+
     def subscriber_emails(self, code: str) -> list[str]:
         """Emails of the active watchers of a prestazione — the alert fan-out set (D20)."""
         rows = self.__rows(
@@ -228,6 +246,87 @@ class Store:
         self.__conn.execute(
             "UPDATE slots SET last_seen = ? WHERE prestazione = ? AND slot_key = ?",
             (ts, code, slot_key),
+        )
+        self.__conn.commit()
+
+    # ----- check-now (D24/D26/D39) -----
+
+    def checknow_cooldown_remaining(self, cf: str, now: float, cooldown: float) -> float:
+        """Seconds still to wait before this user may fire `--check-now` again (D23/D26).
+
+        0.0 when free (never fired, or the last accepted fire is older than
+        `cooldown`). Read-only — the CLI (which owns the cooldown, D26) calls this
+        before deciding to accept; the anchor is the *last accepted* fire, so a
+        rejected call never moves it (else the cooldown would never elapse)."""
+        row = self.__row(
+            "SELECT checknow_requested_at FROM users WHERE cf_hash = ?",
+            (self.__crypto.hash_cf(cf),),
+        )
+        if row is None or row["checknow_requested_at"] is None:
+            return 0.0
+        return max(0.0, cooldown - (now - row["checknow_requested_at"]))
+
+    def accept_checknow(self, cf: str, now: float) -> None:
+        """Record an **accepted** check-now fire (D26): set `checknow_requested_at`.
+        Only ever called on accept (never on a throttled reject)."""
+        self.__conn.execute(
+            "UPDATE users SET checknow_requested_at = ? WHERE cf_hash = ?",
+            (now, self.__crypto.hash_cf(cf)),
+        )
+        self.__conn.commit()
+
+    def checknow_served_since(self, cf: str, request_ts: float) -> bool:
+        """True once the daemon has completed *this* check-now (D26): the block-poll
+        condition the CLI waits on.
+
+        Uses `last_checknow_at >= request_ts` (not strict `>`): a completion is always
+        at-or-after the request it serves, and any *prior* completion is strictly
+        earlier than `request_ts` (which was set to `now` at accept, after that prior
+        completion) — so `>=` can only ever be satisfied by this request's own
+        completion. This closes the exact-equal boundary where a same-timestamp
+        completion would leave a strict-`>` poll hanging forever while the daemon (whose
+        `outstanding` test is strict `>`) already considered the request served."""
+        row = self.__row(
+            "SELECT last_checknow_at FROM users WHERE cf_hash = ?",
+            (self.__crypto.hash_cf(cf),),
+        )
+        if row is None or row["last_checknow_at"] is None:
+            return False
+        return row["last_checknow_at"] >= request_ts
+
+    def outstanding_checknow(self) -> list[tuple[str, list[str]]]:
+        """Users with a check-now awaiting service, each with their active codes (D26/D39).
+
+        Outstanding = a fire newer than the last completion (`checknow_requested_at >
+        last_checknow_at`, or never completed). Returns `(cf_hash, [active codes])`;
+        the daemon works in hash space (it never needs the plaintext CF to serve —
+        each code's scrape picks its own representative credential, D28). A user with
+        no active target yields an empty code list (served as an immediate no-op)."""
+        rows = self.__rows(
+            "SELECT cf_hash FROM users "
+            "WHERE checknow_requested_at IS NOT NULL "
+            "AND (last_checknow_at IS NULL OR checknow_requested_at > last_checknow_at)",
+            (),
+        )
+        out: list[tuple[str, list[str]]] = []
+        for row in rows:
+            cf_hash = row["cf_hash"]
+            codes = self.__rows(
+                "SELECT prestazione FROM targets WHERE user = ? AND active = 1 "
+                "ORDER BY prestazione",
+                (cf_hash,),
+            )
+            out.append((cf_hash, [c["prestazione"] for c in codes]))
+        return out
+
+    def mark_checknow_done(self, cf_hash: str, now: float) -> None:
+        """Record a check-now batch complete (D26): set `last_checknow_at = now`.
+
+        Set **regardless of scrape success/failure** so the blocking CLI always
+        unblocks (failure is coarse — the CLI then prints whatever slots exist, D26).
+        Takes the `cf_hash` from `outstanding_checknow` directly (daemon hash-space)."""
+        self.__conn.execute(
+            "UPDATE users SET last_checknow_at = ? WHERE cf_hash = ?", (now, cf_hash)
         )
         self.__conn.commit()
 
