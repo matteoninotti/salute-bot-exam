@@ -1,4 +1,5 @@
--- salute-bot SQLite schema — 4 tables (D20, refined D26/D29).
+-- salute-bot SQLite schema — core tables (D20, refined D26/D29) plus
+-- registration staging (D40).
 --
 -- Secrets at rest: `cf_enc` / `nre_enc` are AEAD (Fernet) ciphertext; `cf_hash`
 -- is the HMAC-SHA256 blind index (D29) that serves as the users PK and the value

@@ -31,6 +31,7 @@ def _slot(iso_date="2026-06-22", time_="16:00", struttura="POLIAMBULATORIO MONGI
 _PREST = Prestazione(code="8901.20", descrizione="VISITA UROLOGICA DI CONTROLLO", quantita=1)
 _PREST2 = Prestazione(code="7001.10", descrizione="ECOGRAFIA", quantita=1)
 _PREST3 = Prestazione(code="5001.30", descrizione="VISITA CARDIOLOGICA", quantita=1)
+_FLOOR = 120.0
 
 
 @pytest.fixture
@@ -71,7 +72,7 @@ def test_duplicate_user_raises(store):
 def test_delete_user_cascades_targets_but_keeps_slots(store):
     store.add_user(_CF, "a@b.it")
     store.add_target(_CF, _PREST, _NRE)
-    store.insert_slot(_PREST.code, _slot(), now=1000.0)
+    store.record_new_slots(_PREST.code, [_slot()], now=1000.0)
     store.delete_user(_CF)
     assert store.user_exists(_CF) is False
     assert store.get_user_targets(_CF) == []
@@ -120,7 +121,7 @@ def test_non_dormant_prestazioni_excludes_zero_active_and_orders_overdue_first(s
     store.add_user(_CF, "a@b.it")
     store.add_target(_CF, _PREST, _NRE)             # 8901.20 — never scraped
     store.add_target(_CF, _PREST2, "9999888877776666")  # 7001.10 — scraped recently
-    store.set_last_scrape_at(_PREST2.code, now=5000.0)
+    store.claim_prestazione(_PREST2.code, now=5000.0, floor=_FLOOR)
     store.add_user(_CF2, "c@d.it")
     store.add_target(_CF2, _PREST3, "1231231231231231")
     store.deactivate_target(_CF2, _PREST3.code)     # dormant — excluded
@@ -130,10 +131,10 @@ def test_non_dormant_prestazioni_excludes_zero_active_and_orders_overdue_first(s
     assert _PREST3.code not in codes
 
 
-def test_set_last_scrape_at_advances_the_floor_marker(store):
+def test_claim_prestazione_advances_the_floor_marker(store):
     store.add_user(_CF, "a@b.it")
     store.add_target(_CF, _PREST, _NRE)
-    store.set_last_scrape_at(_PREST.code, now=1234.0)
+    assert store.claim_prestazione(_PREST.code, now=1234.0, floor=_FLOOR) is True
     row = store._Store__conn.execute(
         "SELECT last_scrape_at FROM prestazioni WHERE code = ?", (_PREST.code,)
     ).fetchone()
@@ -152,12 +153,12 @@ def test_subscriber_emails_are_active_watchers(store):
 
 # ----- slots -----
 
-def test_known_slot_keys_and_insert(store):
+def test_known_slot_keys_and_record_new_slots(store):
     store.add_user(_CF, "a@b.it")
     store.add_target(_CF, _PREST, _NRE)
     assert store.known_slot_keys(_PREST.code) == set()
     s = _slot()
-    store.insert_slot(_PREST.code, s, now=1000.0)
+    store.record_new_slots(_PREST.code, [s], now=1000.0)
     assert store.known_slot_keys(_PREST.code) == {s.slot_key}
 
 
@@ -178,7 +179,7 @@ def test_touch_slot_updates_last_seen_only(store):
     store.add_user(_CF, "a@b.it")
     store.add_target(_CF, _PREST, _NRE)
     s = _slot()
-    store.insert_slot(_PREST.code, s, now=1000.0)
+    store.record_new_slots(_PREST.code, [s], now=1000.0)
     store.touch_slot(_PREST.code, s.slot_key, now=2000.0)
     row = store._Store__conn.execute(
         "SELECT first_seen, last_seen FROM slots WHERE slot_key = ?", (s.slot_key,)
@@ -188,8 +189,6 @@ def test_touch_slot_updates_last_seen_only(store):
 
 
 # ----- atomic scrape claim (D39) -----
-
-_FLOOR = 120.0
 
 
 def test_claim_wins_when_never_scraped_then_loses_within_floor(store):

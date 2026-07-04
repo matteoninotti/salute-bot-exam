@@ -13,7 +13,8 @@ Secret hygiene (D35): no secret is ever a command-line argument. `-u`'s CF value
 is **optional** (prompt when omitted, so it need not enter shell history / the
 process table); `--disable` uses a **numbered menu** (no NRE typed); nothing here
 echoes `argv` or a secret. The CF is treated as identifying-but-not-terminal-
-secret, so it is prompted in the clear; no NRE is ever handled by this surface.
+secret, so it is prompted in the clear. NREs are prompted only during setup
+(registration / add-prestazione), never accepted as flags or logged.
 
 I/O is injected (`read`/`write` default to `input`/`print`) so the whole flow is
 driftless to test without a TTY.
@@ -26,6 +27,7 @@ import time
 
 from salutebot.config import EnvConfig
 from salutebot.crypto import Crypto
+from salutebot.daemon import heartbeat_is_stale, resolve_heartbeat_path
 from salutebot.models import Prestazione
 from salutebot.store import Store
 from salutebot.validation import validate_cf, validate_nre
@@ -42,16 +44,20 @@ _CHECKNOW_POLL = 1.0
 
 
 def main(argv: list[str] | None = None, *, store: Store | None = None,
-         read=input, write=print, clock=time.time, sleep=time.sleep) -> None:
+         read=input, write=print, clock=time.time, sleep=time.sleep,
+         heartbeat_path: str | None = None) -> None:
     """Entry point. Builds a real `Store` from env unless one is injected (tests).
     `clock`/`sleep` back `--check-now`'s cooldown + block-poll and are injectable."""
     args = _build_parser().parse_args(argv)
+    resolved_heartbeat_path = (
+        resolve_heartbeat_path() if heartbeat_path is None else heartbeat_path
+    )
     if store is not None:
-        _dispatch(args, store, read, write, clock, sleep)  # injected (tests)
+        _dispatch(args, store, read, write, clock, sleep, resolved_heartbeat_path)  # injected
         return
     owned = Store(os.environ.get(_DB_PATH_VAR, _DEFAULT_DB), Crypto.from_env(EnvConfig()))
     try:
-        _dispatch(args, owned, read, write, clock, sleep)
+        _dispatch(args, owned, read, write, clock, sleep, resolved_heartbeat_path)
     finally:
         owned.close()  # only close the store we created
 
@@ -79,10 +85,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _dispatch(args, store: Store, read, write, clock, sleep) -> None:
+def _dispatch(args, store: Store, read, write, clock, sleep, heartbeat_path: str) -> None:
     if args.check_now:
         _with_user(args.user, store, read, write,
-                   lambda s, cf, w: _cmd_check_now(s, cf, w, clock=clock, sleep=sleep))
+                   lambda s, cf, w: _cmd_check_now(s, cf, w, clock=clock, sleep=sleep,
+                                                   heartbeat_path=heartbeat_path))
     elif args.list:
         _with_user(args.user, store, read, write, _cmd_list)
     elif args.disable:
@@ -96,7 +103,7 @@ def _dispatch(args, store: Store, read, write, clock, sleep) -> None:
     elif args.user is not None:  # -u given, no other flag => log in + show status
         _with_user(args.user, store, read, write, _returning_user_menu)
     else:  # bare invocation => registration / interactive manage menu
-        _registration(store, read, write, clock, sleep)
+        _registration(store, read, write, clock, sleep, heartbeat_path)
 
 
 # ----- CF resolution + guard -----
@@ -140,23 +147,31 @@ def _cmd_list(store: Store, cf: str, write) -> None:
         write(f"  {row['iso_date']} {row['time']} — {where}")
 
 
-def _cmd_check_now(store: Store, cf: str, write, *, clock, sleep) -> None:
+def _cmd_check_now(store: Store, cf: str, write, *, clock, sleep, heartbeat_path: str) -> None:
     """Ask the daemon to refresh this user's prestazioni now, then print them (D24/D26).
 
     The CLI owns the cooldown (D26): a 2nd fire within 5 min (D23) prints only the
     remaining cooldown and exits — no request, no wait. Otherwise it records the fire
     and **blocks** (D24, no email fallback) until the daemon signals completion
-    (`last_checknow_at > this request`), then shows the user's current slots. Requires
-    the watcher daemon to be running; with none, it waits (D24 is strictly blocking)."""
+    (`last_checknow_at > this request`), then shows the user's current slots. "Strictly
+    blocking" (D24) is refined by D46 to mean *while the watcher is alive*: if the daemon
+    heartbeat is stale — before firing or during the wait — it refuses instead of hanging
+    forever (there is no one to serve the request), mirroring registration (D40)."""
     remaining = store.checknow_cooldown_remaining(cf, clock(), COOLDOWN_SECONDS)
     if remaining > 0:
         write(f"Controllo immediato in pausa — riprova tra {math.ceil(remaining)}s.")
+        return
+    if _daemon_unavailable(heartbeat_path, clock()):  # down before firing → don't consume the cooldown
+        _write_daemon_unavailable(write)
         return
     request_ts = clock()
     store.accept_checknow(cf, request_ts)
     write("Controllo immediato in coda — potrebbe richiedere qualche istante...")
     while not store.checknow_served_since(cf, request_ts):
         sleep(_CHECKNOW_POLL)
+        if _daemon_unavailable(heartbeat_path, clock()):  # died mid-wait → stop waiting
+            _write_daemon_unavailable(write)
+            return
     _cmd_list(store, cf, write)
 
 
@@ -202,7 +217,7 @@ def _cmd_delete_user(store: Store, cf: str, read, write) -> None:
 
 # ----- registration / add-prestazione (D14, daemon-driven ack scrape) -----
 
-def _registration(store: Store, read, write, clock, sleep) -> None:
+def _registration(store: Store, read, write, clock, sleep, heartbeat_path: str) -> None:
     """Bare invocation: register a new user, or show an existing user's manage menu.
 
     New user → collect email + NRE, then the shared ack-scrape flow (D14). Existing
@@ -214,7 +229,7 @@ def _registration(store: Store, read, write, clock, sleep) -> None:
         _returning_user_menu(store, cf, write)
         email = store.get_email(cf)
         if email is not None:  # always set for an existing user; guard satisfies the type
-            _offer_add_prestazione(store, cf, email, read, write, clock, sleep)
+            _offer_add_prestazione(store, cf, email, read, write, clock, sleep, heartbeat_path)
         return
     email = read("Email per le notifiche: ").strip()
     if not _valid_email(email):
@@ -223,7 +238,7 @@ def _registration(store: Store, read, write, clock, sleep) -> None:
     nre = _prompt_nre(read, write)
     if nre is None:
         return
-    _run_ack(store, cf, email, nre, read, write, clock, sleep)
+    _run_ack(store, cf, email, nre, read, write, clock, sleep, heartbeat_path)
 
 
 def _returning_user_menu(store: Store, cf: str, write) -> None:
@@ -240,7 +255,9 @@ def _returning_user_menu(store: Store, cf: str, write) -> None:
     write("Gestisci con: --check-now, --list, --disable, --disable-all, --delete-user.")
 
 
-def _offer_add_prestazione(store: Store, cf: str, email: str, read, write, clock, sleep) -> None:
+def _offer_add_prestazione(
+    store: Store, cf: str, email: str, read, write, clock, sleep, heartbeat_path: str
+) -> None:
     """Interactive add-prestazione for an existing user (D14/D37 — a menu action, not a
     flag). Enter an NRE to watch another prestazione; blank to skip."""
     raw = read("Aggiungere una prestazione? Inserisci il suo NRE (vuoto per saltare): ").strip()
@@ -251,22 +268,33 @@ def _offer_add_prestazione(store: Store, cf: str, email: str, read, write, clock
     except ValueError as err:
         write(str(err))
         return
-    _run_ack(store, cf, email, nre, read, write, clock, sleep)
+    _run_ack(store, cf, email, nre, read, write, clock, sleep, heartbeat_path)
 
 
-def _run_ack(store: Store, cf: str, email: str, nre: str, read, write, clock, sleep) -> None:
+def _run_ack(
+    store: Store, cf: str, email: str, nre: str, read, write, clock, sleep,
+    heartbeat_path: str,
+) -> None:
     """Stage an ack-scrape (D40), block until the daemon resolves it, show the
     prestazione + initial slots, confirm, and persist the target (D14/D27).
 
-    The CLI never scrapes — it writes the request and waits for the daemon (needs the
-    watcher running). On 'invalid'/'error' nothing is saved; on confirm it writes the
-    user (if new) and the target."""
+    The CLI never scrapes — it writes the request and waits for the daemon. Unlike
+    `--check-now` (D24), registration has no locked "wait forever" rule, so it refuses
+    to block when the daemon heartbeat is stale. On 'invalid'/'error' nothing is saved;
+    on confirm it writes the user (if new) and the target."""
+    if _daemon_unavailable(heartbeat_path, clock()):
+        _write_daemon_unavailable(write, nothing_saved=True)
+        return
     request_ts = clock()
     store.submit_registration(cf, email, nre, request_ts)
     write("Verifica della ricetta sul sistema di prenotazione — potrebbe richiedere qualche istante...")
     result = store.registration_result(cf, request_ts)
     while result is None:
         sleep(_CHECKNOW_POLL)
+        if _daemon_unavailable(heartbeat_path, clock()):
+            store.clear_registration(cf)
+            _write_daemon_unavailable(write, nothing_saved=True)
+            return
         result = store.registration_result(cf, request_ts)
 
     if result["status"] != "ok":
@@ -293,6 +321,19 @@ def _run_ack(store: Store, cf: str, email: str, nre: str, read, write, clock, sl
     write(f"Fatto — ora segui {desc} ({code}). Le notifiche arrivano a {email}.")
 
 
+def _daemon_unavailable(heartbeat_path: str, now: float) -> bool:
+    """True when the watcher's heartbeat is stale/absent (D46) — the blocking
+    commands (registration, `--check-now`) only wait while the daemon is alive."""
+    return heartbeat_is_stale(heartbeat_path, now)
+
+
+def _write_daemon_unavailable(write, *, nothing_saved: bool = False) -> None:
+    msg = "Il watcher non risulta in esecuzione. Avvia il daemon e riprova."
+    if nothing_saved:  # registration would have persisted a target; check-now saves nothing
+        msg += " Nulla è stato salvato."
+    write(msg)
+
+
 def _print_code_slots(store: Store, code: str, write) -> None:
     rows = store.slots_for_code(code)
     if not rows:
@@ -307,7 +348,7 @@ def _print_code_slots(store: Store, code: str, write) -> None:
 
 
 def _prompt_nre(read, write) -> str | None:
-    """Prompt for and validate an NRE (never echoed — D35); None on invalid format."""
+    """Prompt for and validate an NRE (never passed in argv — D35); None on invalid."""
     try:
         return validate_nre(read("NRE (numero ricetta): "))
     except ValueError as err:

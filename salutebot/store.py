@@ -1,4 +1,4 @@
-"""SQLite persistence — the 4-table store (D20) with secrets encrypted at rest.
+"""SQLite persistence — the core tables plus registration staging (D20/D40).
 
 `Store` owns the connection and is the only place SQL lives. Secrets never enter
 a query in plaintext: the CF is written as `cf_enc` (AEAD) and looked up by its
@@ -166,15 +166,6 @@ class Store:
         )
         return [dict(r) for r in rows]
 
-    def set_last_scrape_at(self, code: str, now: float) -> None:
-        """Mark a scrape **attempt** of this prestazione (D22 floor throttles the
-        *rate* of scrapes, so this advances on every attempt, success or not — else
-        a failing prestazione would stay 'due' and the loop would hammer the CUP)."""
-        self.__conn.execute(
-            "UPDATE prestazioni SET last_scrape_at = ? WHERE code = ?", (now, code)
-        )
-        self.__conn.commit()
-
     def claim_prestazione(self, code: str, now: float, floor: float) -> bool:
         """Atomically claim this prestazione for a scrape, returning True iff won (D39).
 
@@ -207,11 +198,6 @@ class Store:
     def known_slot_keys(self, code: str) -> set[str]:
         rows = self.__rows("SELECT slot_key FROM slots WHERE prestazione = ?", (code,))
         return {r["slot_key"] for r in rows}
-
-    def insert_slot(self, code: str, slot: Slot, now: float | None = None) -> None:
-        """Record one newly-seen slot with `first_seen = last_seen = now` (D8)."""
-        self.__insert_slot(code, slot, time.time() if now is None else now)
-        self.__conn.commit()
 
     def record_new_slots(self, code: str, slots: list[Slot], now: float | None = None) -> None:
         """Persist a batch of newly-alerted slots in one transaction (D8).
