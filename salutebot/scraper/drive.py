@@ -27,6 +27,7 @@ Points still needing the live smoke run are marked `SMOKE-CONFIRM`.
 """
 
 import os
+import re
 from collections.abc import Mapping
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -49,10 +50,14 @@ _SEARCH_BTN = _P + "ePrescriptionSearchForm:nreButton"       # visible "Avanti" 
 _NRE_ERROR = _P + "ePrescriptionSearchForm:nreError0"        # invalid-NRE hook (SMOKE-CONFIRM)
 _CF_ERROR = _P + "ePrescriptionSearchForm:cfError"
 _CONFIRM_NEXT = _P + "navigation-epPrestazioni-main:epPrestazioni-nextButton-main"  # "Avanti"
-_NEXT_AREA = _P + "appuntamentiForm:nextArea"                # "Estendi area di ricerca"
+_APPUNTAMENTI_FORM = _P + "appuntamentiForm"                 # the slots page is up
+_NEXT_AREA = _P + "appuntamentiForm:nextArea"               # "Estendi area di ricerca"
 _WARNING_CONFIRM = _P + "appuntamentiForm:dialogAppuntamentiWarningConfirmButton"
 _SLOTS_CONTAINER = _P + "appuntamentiForm:availableAppointmentsContainer"
 _CONFIRM_ROW = ".prestazioneRow"                             # confirmation parse target (D14)
+# "altre disponibilità" is a positional j_idt button (id renumbers per render, HAR
+# source `_t385`), so it is matched by its visible label, not its id (SMOKE-CONFIRM).
+_MORE_AVAIL_RE = re.compile(r"altre disponibilit", re.I)
 
 
 def _sel(element_id: str) -> str:
@@ -67,11 +72,16 @@ class LiveScraper:
     scrape, so each run is a clean session (matches D4: tokens/cookies re-harvested every
     cycle, never persisted) with no state leaking between scrapes."""
 
-    def __init__(self, headless: bool = True, timeout_s: float = 30.0,
-                 dialog_s: float = 2.0) -> None:
+    def __init__(self, headless: bool = True, timeout_s: float = 60.0,
+                 action_s: float = 10.0) -> None:
         self.__headless = headless
+        # The CUP site is slow (a proceed can take ~30 s incl. reCAPTCHA; the slots page
+        # ~15 s), so the page-transition timeout is generous.
         self.__timeout_ms = int(timeout_s * 1000)
-        self.__dialog_ms = int(dialog_s * 1000)  # shorter wait for the optional warning dialog
+        # Shorter wait for CONDITIONAL controls (the extend-area buttons, the warning
+        # dialog): present on some ricette, absent on others — don't burn the full
+        # timeout when they legitimately aren't there.
+        self.__action_ms = int(action_s * 1000)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "LiveScraper":
@@ -79,7 +89,7 @@ class LiveScraper:
         `SALUTEBOT_SCRAPE_TIMEOUT` (seconds, default 30)."""
         src = os.environ if env is None else env
         headful = (src.get("SALUTEBOT_HEADFUL", "").strip().lower() in ("1", "true", "yes"))
-        timeout = float(src.get("SALUTEBOT_SCRAPE_TIMEOUT", "30"))
+        timeout = float(src.get("SALUTEBOT_SCRAPE_TIMEOUT", "60"))
         return cls(headless=not headful, timeout_s=timeout)
 
     def scrape(self, cf: str, nre: str) -> ScrapeResult:
@@ -122,10 +132,11 @@ class LiveScraper:
             # the invalid signal is wired (D28 / 2026-07-04 decision). SMOKE-CONFIRM.
             raise ScrapeError("confirmation page had no parseable prestazione")
 
-        page.click(_sel(_CONFIRM_NEXT))                       # "Avanti" → appuntamenti
-        page.wait_for_selector(_sel(_NEXT_AREA))
+        page.click(_sel(_CONFIRM_NEXT))                       # "Avanti" → appuntamenti page
+        page.wait_for_selector(_sel(_APPUNTAMENTI_FORM))      # the slots page is up
         self.__extend_to_widest_area(page)                    # D17
 
+        page.wait_for_selector(_sel(_SLOTS_CONTAINER))
         container_html = page.locator(_sel(_SLOTS_CONTAINER)).inner_html()
         slots = parse_available_slots(container_html)         # may be [] (valid "no slots")
         return ScrapeResult(prestazione=prestazione, slots=slots)
@@ -163,20 +174,38 @@ class LiveScraper:
         return " | ".join(parts)
 
     def __extend_to_widest_area(self, page) -> None:
-        """Always advance to the widest search area before harvesting (D17): geo selectors
-        left empty (they submit NO_VALUE), then click "Estendi area di ricerca". An optional
-        confirmation dialog is dismissed if it appears. SMOKE-CONFIRM: dialog presence + the
-        settle wait for the ICEfaces partial-response."""
-        page.click(_sel(_NEXT_AREA))
+        """Always advance to the widest search area before harvesting (D17).
+
+        The geo selectors are left empty (they submit NO_VALUE); reaching the wide list is
+        a **two-step, conditional** branch (recon; HAR sources `_t385` → `nextArea`): first
+        "altre disponibilità", then "Estendi area di ricerca". Both are best-effort — a
+        ricetta with near-home availability may show neither — so each is clicked only if
+        present, then the ICEfaces partial-response is allowed to settle. An optional
+        warning dialog is confirmed if it appears. SMOKE-CONFIRM: the exact labels + waits."""
+        if self.__click_if_present(page, page.get_by_text(_MORE_AVAIL_RE)):
+            self.__settle(page)
+        if self.__click_if_present(page, page.locator(_sel(_NEXT_AREA))):
+            self.__click_if_present(page, page.locator(_sel(_WARNING_CONFIRM)))  # optional dialog
+            self.__settle(page)
+
+    def __click_if_present(self, page, locator) -> bool:
+        """Click the first match if it becomes visible within the short action window;
+        return whether it was clicked. Used for the conditional extend-area controls."""
+        target = locator.first
         try:
-            page.wait_for_selector(_sel(_WARNING_CONFIRM), timeout=self.__dialog_ms)
-            page.click(_sel(_WARNING_CONFIRM))
+            target.wait_for(state="visible", timeout=self.__action_ms)
         except PlaywrightTimeoutError:
-            pass  # no dialog on this run
+            return False
+        target.click()
+        return True
+
+    def __settle(self, page) -> None:
+        """Let the ICEfaces partial-response finish. Best-effort: the app keeps a poll
+        channel open, so networkidle may not fire — the container is read regardless."""
         try:
             page.wait_for_load_state("networkidle", timeout=self.__timeout_ms)
         except PlaywrightTimeoutError:
-            pass  # ICEfaces keeps a poll channel open; the container is still readable
+            pass
 
     def __check_invalid_nre(self, page) -> None:
         """Hook for the permanent invalid-NRE signal (D28) — DISABLED until confirmed.
