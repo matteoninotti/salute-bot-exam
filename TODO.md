@@ -36,7 +36,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 - [x] **(M)** Robustness (D11): in-attempt retry + exponential backoff on transient `ScrapeError`; N=3 consecutive failed cycles → subscribers notified; dead-man heartbeat emitted + stale-check/broadcast primitives (external checker wiring → Phase 5)
 - [x] **(M)** Fan-out partial-failure fix (D38, amends D36): persist on ≥1 delivered (kills the one-dead-mailbox spam loop); bounded inline per-recipient send retry + backoff; abandoned recipients surfaced in `FanOutResult.failed`; total-failure batch stays unpersisted (self-heal)
 - [x] **(M)** `--check-now` end-to-end (D24/D26/D25/D39): CLI-owned cooldown + block-poll; daemon serving via the two `users` timestamps; check-now lane served before the sweep each tick; per-prestazione coalescing realized by an **atomic scrape claim** (D39, N>1-safe) rather than an explicit job-queue; idle sleep capped at a 2 s poll tick so the block-poll is answered promptly
-- [ ] **(M)** New-user registration + add-prestazione (D14): daemon-driven acknowledgment scrape (NRE→prestazione + initial slots); pin the CLI→daemon request mechanism  _(moved from Phase 2 — needs the daemon, D27)_
+- [x] **(M)** New-user registration + add-prestazione (D14/D40): daemon-driven acknowledgment scrape (NRE→prestazione + initial slots) via a 5th `pending_registrations` staging table; CLI stages an unresolved (CF, NRE), block-polls, confirms, then persists user/target; add-prestazione is an interactive returning-user-menu action (not a flag, D37); brand-new prestazioni are baselined (no alert)
 
 ## Phase 4 — live drive (riskiest, needs valid NRE)
 

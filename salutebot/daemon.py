@@ -266,6 +266,58 @@ def serve_checknow(
             in_flight.discard(cf_hash)
 
 
+# ----- registration ack-scrape lane (D14/D40) -----
+
+
+def serve_registrations(
+    store: Store, scraper: Scraper, now: float,
+    *, in_flight: set[str], sleep=time.sleep, heartbeat=lambda: None,
+) -> None:
+    """Resolve pending registration ack-scrapes (D14/D40).
+
+    For each staged `(CF, NRE)`, scrape to discover its prestazione + current slots
+    (the CLI can't scrape, D27), write the outcome back for the blocking CLI, and — for
+    a **brand-new** prestazione (no active subscriber yet) — baseline its current slots
+    as already-seen so the first subscriber starts from "now" and isn't alerted for the
+    slots shown at registration (D8). It never persists a target (that waits on the
+    user's confirm, D14) and sends no alert. `in_flight` guards re-picking (D26-style);
+    `heartbeat` keeps liveness fresh across a slow scrape (D11)."""
+    for cf_hash, cf, nre in store.outstanding_registrations():
+        if cf_hash in in_flight:
+            continue
+        in_flight.add(cf_hash)
+        try:
+            _resolve_registration(store, scraper, cf_hash, cf, nre, now, sleep)
+        finally:
+            in_flight.discard(cf_hash)
+        heartbeat()
+
+
+def _resolve_registration(
+    store: Store, scraper: Scraper, cf_hash: str, cf: str, nre: str, now: float, sleep
+) -> None:
+    """One ack scrape: resolve the prestazione, baseline a brand-new one, write back (D40)."""
+    try:
+        result = _scrape_with_retry(scraper, cf, nre, sleep)
+    except NREInvalidError:
+        store.resolve_registration(cf_hash, now, "invalid")  # dead ricetta — CLI tells the user
+        return
+    except ScrapeError:
+        store.resolve_registration(cf_hash, now, "error")    # transient — CLI says try again
+        return
+    prest = result.prestazione
+    store.upsert_prestazione(prest)
+    if not store.has_active_target(prest.code):
+        # First subscriber: baseline the current slots as already-seen (no alert). An
+        # already-watched code is left to the sweep (its slots are shared, D20), so a
+        # new slot found here still alerts existing subscribers next sweep (not suppressed).
+        known = store.known_slot_keys(prest.code)
+        fresh = [s for s in result.slots if s.slot_key not in known]
+        if fresh:
+            store.record_new_slots(prest.code, fresh, now)
+    store.resolve_registration(cf_hash, now, "ok", prest.code, prest.descrizione)
+
+
 # ----- dead-man heartbeat (D11) -----
 
 
@@ -339,6 +391,7 @@ def run(
     # harmless (systemd restarts, and the streak / in-flight simply restart too).
     failure_counts: dict[str, int] = {}
     in_flight: set[str] = set()
+    reg_in_flight: set[str] = set()
 
     def beat() -> None:  # rewrite the dead-man heartbeat with a fresh timestamp (D11)
         write_heartbeat(heartbeat_path, clock())
@@ -348,6 +401,8 @@ def run(
             beat()  # liveness at the top of every tick (D11)
             serve_checknow(store, scraper, mailer, clock(), in_flight=in_flight,
                            failure_counts=failure_counts, sleep=sleep, heartbeat=beat)  # lane first (D25)
+            serve_registrations(store, scraper, clock(), in_flight=reg_in_flight,
+                                sleep=sleep, heartbeat=beat)  # ack-scrape lane (D14/D40)
             run_sweep(store, scraper, mailer, clock(), failure_counts=failure_counts,
                       sleep=sleep, heartbeat=beat)
             wait = seconds_until_next_due(store, clock())

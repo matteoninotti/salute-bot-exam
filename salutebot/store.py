@@ -330,6 +330,106 @@ class Store:
         )
         self.__conn.commit()
 
+    # ----- registration staging (D14/D40) -----
+
+    def submit_registration(self, cf: str, email: str, nre: str, now: float) -> None:
+        """Stage an unresolved `(CF, NRE)` registration for the daemon (D40).
+
+        Upserts on `cf_hash` (one pending op per user; a re-submit replaces and clears
+        any prior result), storing CF + NRE encrypted (D3). The daemon resolves the
+        prestazione code by scraping — the CLI never scrapes (D27)."""
+        self.__conn.execute(
+            "INSERT INTO pending_registrations "
+            "(cf_hash, cf_enc, email, nre_enc, requested_at, resolved_at, "
+            " result_status, result_code, result_desc) "
+            "VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL) "
+            "ON CONFLICT(cf_hash) DO UPDATE SET cf_enc = excluded.cf_enc, "
+            "email = excluded.email, nre_enc = excluded.nre_enc, "
+            "requested_at = excluded.requested_at, resolved_at = NULL, "
+            "result_status = NULL, result_code = NULL, result_desc = NULL",
+            (self.__crypto.hash_cf(cf), self.__crypto.encrypt(cf), email,
+             self.__crypto.encrypt(nre), now),
+        )
+        self.__conn.commit()
+
+    def registration_result(self, cf: str, request_ts: float) -> dict | None:
+        """The daemon's ack-scrape outcome for this request, or None if not yet done.
+
+        Resolved iff `resolved_at >= request_ts` (a completion at-or-after this submit;
+        the `>=` boundary reasoning mirrors `checknow_served_since`). Returns
+        `{status, code, desc}` — `status` is 'ok' | 'invalid' | 'error' (D40)."""
+        row = self.__row(
+            "SELECT resolved_at, result_status, result_code, result_desc "
+            "FROM pending_registrations WHERE cf_hash = ?",
+            (self.__crypto.hash_cf(cf),),
+        )
+        if row is None or row["resolved_at"] is None or row["resolved_at"] < request_ts:
+            return None
+        return {"status": row["result_status"], "code": row["result_code"],
+                "desc": row["result_desc"]}
+
+    def clear_registration(self, cf: str) -> None:
+        """Drop the pending row once the CLI has consumed the result (confirm or reject)."""
+        self.__conn.execute(
+            "DELETE FROM pending_registrations WHERE cf_hash = ?", (self.__crypto.hash_cf(cf),)
+        )
+        self.__conn.commit()
+
+    def outstanding_registrations(self) -> list[tuple[str, str, str]]:
+        """Pending registrations awaiting the daemon's ack scrape (D40).
+
+        Outstanding = `resolved_at IS NULL`. Returns `(cf_hash, cf, nre)` with the CF
+        and NRE **decrypted** — the daemon needs the literal credential to scrape (D28/
+        D29); the caller uses them only to drive the scrape and must never log them."""
+        rows = self.__rows(
+            "SELECT cf_hash, cf_enc, nre_enc FROM pending_registrations "
+            "WHERE resolved_at IS NULL",
+            (),
+        )
+        return [
+            (r["cf_hash"], self.__crypto.decrypt(r["cf_enc"]), self.__crypto.decrypt(r["nre_enc"]))
+            for r in rows
+        ]
+
+    def resolve_registration(self, cf_hash: str, now: float, status: str,
+                             code: str | None = None, desc: str | None = None) -> None:
+        """Record the ack-scrape outcome so the blocking CLI unblocks (D40). Takes the
+        `cf_hash` from `outstanding_registrations` directly (daemon hash-space)."""
+        self.__conn.execute(
+            "UPDATE pending_registrations SET resolved_at = ?, result_status = ?, "
+            "result_code = ?, result_desc = ? WHERE cf_hash = ?",
+            (now, status, code, desc, cf_hash),
+        )
+        self.__conn.commit()
+
+    def has_active_target(self, code: str) -> bool:
+        """True if some user already actively watches this prestazione (D40 baseline gate)."""
+        return self.__row(
+            "SELECT 1 FROM targets WHERE prestazione = ? AND active = 1 LIMIT 1", (code,)
+        ) is not None
+
+    def upsert_prestazione(self, prestazione: Prestazione) -> None:
+        """Ensure the prestazione row exists (D40) — the ack scrape discovers it before
+        any target references it. Refreshes the descrizione on conflict."""
+        self.__conn.execute(
+            "INSERT INTO prestazioni (code, descrizione) VALUES (?, ?) "
+            "ON CONFLICT(code) DO UPDATE SET descrizione = excluded.descrizione",
+            (prestazione.code, prestazione.descrizione),
+        )
+        self.__conn.commit()
+
+    def slots_for_code(self, code: str) -> list[dict]:
+        """All slots for one prestazione, by code (D40 registration display).
+
+        Unlike `list_user_slots` this needs no target join — registration shows the
+        prestazione's slots *before* the user is subscribed (D20 consequence a)."""
+        rows = self.__rows(
+            "SELECT iso_date, time, struttura, cap, address, status, first_seen, last_seen "
+            "FROM slots WHERE prestazione = ? ORDER BY iso_date, time",
+            (code,),
+        )
+        return [dict(r) for r in rows]
+
     # ----- internal query helpers -----
 
     def __row(self, sql: str, params: tuple) -> sqlite3.Row | None:

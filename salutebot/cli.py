@@ -5,8 +5,9 @@ Per D27 the CLI **never scrapes**; it only reads/writes SQLite rows. Login (`-u`
 user display are pure row operations. `--check-now` also never scrapes here (D27):
 it writes a request timestamp and **blocks** until the daemon serves it (D24/D26) —
 the scrape happens in the daemon. New-user registration and adding a prestazione
-require the D14 acknowledgment scrape, which per D27 is **daemon-driven** — still
-deferred (the next Phase 3 task).
+(D14) work the same way: the CLI stages an unresolved `(CF, NRE)` (D40), blocks while
+the daemon runs the acknowledgment scrape (NRE → prestazione + initial slots), shows
+the result for confirmation, then writes the user/target rows — still no scrape here.
 
 Secret hygiene (D35): no secret is ever a command-line argument. `-u`'s CF value
 is **optional** (prompt when omitted, so it need not enter shell history / the
@@ -25,8 +26,9 @@ import time
 
 from salutebot.config import EnvConfig
 from salutebot.crypto import Crypto
+from salutebot.models import Prestazione
 from salutebot.store import Store
-from salutebot.validation import validate_cf
+from salutebot.validation import validate_cf, validate_nre
 
 _DB_PATH_VAR = "SALUTEBOT_DB"
 _DEFAULT_DB = "salute-bot.db"
@@ -90,10 +92,10 @@ def _dispatch(args, store: Store, read, write, clock, sleep) -> None:
     elif args.delete_user:
         _with_user(args.user, store, read, write,
                    lambda s, cf, w: _cmd_delete_user(s, cf, read, w))
-    elif args.user is not None:  # -u given, no other flag => log in + show menu
+    elif args.user is not None:  # -u given, no other flag => log in + show status
         _with_user(args.user, store, read, write, _returning_user_menu)
-    else:  # bare invocation => registration / menu
-        _registration(store, read, write)
+    else:  # bare invocation => registration / interactive manage menu
+        _registration(store, read, write, clock, sleep)
 
 
 # ----- CF resolution + guard -----
@@ -197,22 +199,34 @@ def _cmd_delete_user(store: Store, cf: str, read, write) -> None:
     write("Your records have been permanently deleted.")
 
 
-# ----- registration / menu -----
+# ----- registration / add-prestazione (D14, daemon-driven ack scrape) -----
 
-def _registration(store: Store, read, write) -> None:
+def _registration(store: Store, read, write, clock, sleep) -> None:
+    """Bare invocation: register a new user, or show an existing user's manage menu.
+
+    New user → collect email + NRE, then the shared ack-scrape flow (D14). Existing
+    user → status + an interactive offer to add another prestazione."""
     cf = _resolve_cf(None, read, write)
     if cf is None:
         return
     if store.user_exists(cf):
         _returning_user_menu(store, cf, write)
+        email = store.get_email(cf)
+        if email is not None:  # always set for an existing user; guard satisfies the type
+            _offer_add_prestazione(store, cf, email, read, write, clock, sleep)
         return
-    # New-user onboarding needs the D14 acknowledgment scrape (NRE -> prestazione
-    # + initial slots), which per D27 is daemon-driven -- not built yet (Phase 3).
-    write("Registering a new user needs the watcher service, which isn't available yet.")
-    write("Available now: -u [CF], --check-now, --list, --disable, --disable-all, --delete-user.")
+    email = read("Email for notifications: ").strip()
+    if not _valid_email(email):
+        write("That doesn't look like an email address. Nothing was saved.")
+        return
+    nre = _prompt_nre(read, write)
+    if nre is None:
+        return
+    _run_ack(store, cf, email, nre, read, write, clock, sleep)
 
 
 def _returning_user_menu(store: Store, cf: str, write) -> None:
+    """Read-only status (the `-u` login view — no prompts, so it never blocks)."""
     write(f"Welcome back. Notifications go to {store.get_email(cf)}.")
     targets = store.get_user_targets(cf)
     if not targets:
@@ -223,6 +237,87 @@ def _returning_user_menu(store: Store, cf: str, write) -> None:
             state = "on" if target["active"] else "off"
             write(f"  {target['code']} — {target['descrizione']}  [{state}]")
     write("Manage with: --check-now, --list, --disable, --disable-all, --delete-user.")
+
+
+def _offer_add_prestazione(store: Store, cf: str, email: str, read, write, clock, sleep) -> None:
+    """Interactive add-prestazione for an existing user (D14/D37 — a menu action, not a
+    flag). Enter an NRE to watch another prestazione; blank to skip."""
+    raw = read("Add a prestazione? Enter its NRE (blank to skip): ").strip()
+    if not raw:
+        return
+    try:
+        nre = validate_nre(raw)
+    except ValueError as err:
+        write(str(err))
+        return
+    _run_ack(store, cf, email, nre, read, write, clock, sleep)
+
+
+def _run_ack(store: Store, cf: str, email: str, nre: str, read, write, clock, sleep) -> None:
+    """Stage an ack-scrape (D40), block until the daemon resolves it, show the
+    prestazione + initial slots, confirm, and persist the target (D14/D27).
+
+    The CLI never scrapes — it writes the request and waits for the daemon (needs the
+    watcher running). On 'invalid'/'error' nothing is saved; on confirm it writes the
+    user (if new) and the target."""
+    request_ts = clock()
+    store.submit_registration(cf, email, nre, request_ts)
+    write("Verifying your ricetta with the booking system — may take a moment...")
+    result = store.registration_result(cf, request_ts)
+    while result is None:
+        sleep(_CHECKNOW_POLL)
+        result = store.registration_result(cf, request_ts)
+
+    if result["status"] != "ok":
+        store.clear_registration(cf)
+        if result["status"] == "invalid":
+            write("That ricetta (NRE) isn't valid — expired, already used, or not "
+                  "recognized. Nothing was saved.")
+        else:
+            write("Couldn't reach the booking system right now — please try again in "
+                  "a moment. Nothing was saved.")
+        return
+
+    code, desc = result["code"], result["desc"]
+    write(f"\nYour ricetta unlocks: {desc} ({code}).")
+    _print_code_slots(store, code, write)
+    answer = read("Watch this prestazione? [y/N]: ").strip().lower()
+    store.clear_registration(cf)
+    if answer not in ("y", "yes", "s", "si", "sì"):
+        write("Okay — not watching it. Nothing was saved.")
+        return
+    if not store.user_exists(cf):
+        store.add_user(cf, email)
+    store.add_target(cf, Prestazione(code=code, descrizione=desc, quantita=None), nre)
+    write(f"Done — now watching {desc} ({code}). Notifications go to {email}.")
+
+
+def _print_code_slots(store: Store, code: str, write) -> None:
+    rows = store.slots_for_code(code)
+    if not rows:
+        write("No slots are available right now — you'll be alerted when one opens.")
+        return
+    write(f"Currently {len(rows)} slot(s) available:")
+    for row in rows:
+        where = row["struttura"] or "?"
+        if row["address"]:
+            where = f"{where}, {row['address']}"
+        write(f"  {row['iso_date']} {row['time']} — {where}")
+
+
+def _prompt_nre(read, write) -> str | None:
+    """Prompt for and validate an NRE (never echoed — D35); None on invalid format."""
+    try:
+        return validate_nre(read("NRE (ricetta number): "))
+    except ValueError as err:
+        write(str(err))
+        return None
+
+
+def _valid_email(email: str) -> bool:
+    """Minimal structural check — an `@` with a dotted domain. Not RFC-complete."""
+    at = email.count("@")
+    return at == 1 and "." in email.split("@")[1] and not email.endswith(".")
 
 
 if __name__ == "__main__":

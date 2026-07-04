@@ -252,3 +252,54 @@ def test_outstanding_checknow_lists_users_with_their_active_codes(store):
     # Once served, it drops out of the outstanding set.
     store.mark_checknow_done(cf_hash, now=1005.0)
     assert store.outstanding_checknow() == []
+
+
+# ----- registration staging (D14/D40) -----
+
+def test_submit_registration_stages_encrypted_secrets(store):
+    store.submit_registration(_CF, "a@b.it", _NRE, now=1000.0)
+    row = store._Store__conn.execute(
+        "SELECT cf_enc, nre_enc, resolved_at FROM pending_registrations").fetchone()
+    assert row["cf_enc"] != _CF and row["nre_enc"] != _NRE   # encrypted at rest (D3)
+    assert row["resolved_at"] is None                        # outstanding until the daemon resolves
+    # The daemon reads back the decrypted credential to drive the scrape.
+    outstanding = store.outstanding_registrations()
+    assert outstanding == [(store._Store__crypto.hash_cf(_CF), _CF, _NRE)]
+
+
+def test_registration_result_none_until_resolved_then_returned(store):
+    store.submit_registration(_CF, "a@b.it", _NRE, now=1000.0)
+    assert store.registration_result(_CF, request_ts=1000.0) is None
+    cf_hash = store._Store__crypto.hash_cf(_CF)
+    store.resolve_registration(cf_hash, now=1002.0, status="ok",
+                               code=_PREST.code, desc=_PREST.descrizione)
+    result = store.registration_result(_CF, request_ts=1000.0)
+    assert result == {"status": "ok", "code": _PREST.code, "desc": _PREST.descrizione}
+    assert store.outstanding_registrations() == []           # resolved -> no longer outstanding
+
+
+def test_resubmit_replaces_and_clears_a_prior_result(store):
+    store.submit_registration(_CF, "a@b.it", _NRE, now=1000.0)
+    store.resolve_registration(store._Store__crypto.hash_cf(_CF), now=1001.0, status="invalid")
+    # A fresh fire (e.g. a new ricetta) resets the row and re-opens it for the daemon.
+    store.submit_registration(_CF, "a@b.it", "9999999999", now=2000.0)
+    assert store.registration_result(_CF, request_ts=2000.0) is None
+    assert len(store.outstanding_registrations()) == 1
+    store.clear_registration(_CF)
+    assert store.outstanding_registrations() == []
+
+
+def test_has_active_target_and_upsert_prestazione(store):
+    assert store.has_active_target(_PREST.code) is False
+    store.upsert_prestazione(_PREST)  # exists but nobody watches it yet
+    assert store.has_active_target(_PREST.code) is False
+    store.add_user(_CF, "a@b.it")
+    store.add_target(_CF, _PREST, _NRE)
+    assert store.has_active_target(_PREST.code) is True
+
+
+def test_slots_for_code_reads_without_a_target_join(store):
+    store.upsert_prestazione(_PREST)
+    store.record_new_slots(_PREST.code, [_slot("2026-06-22", "16:00")], now=1000.0)
+    rows = store.slots_for_code(_PREST.code)         # no user/target needed (D20 consequence a)
+    assert len(rows) == 1 and rows[0]["iso_date"] == "2026-06-22"

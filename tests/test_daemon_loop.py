@@ -19,6 +19,7 @@ from salutebot.daemon import (
     run_sweep,
     seconds_until_next_due,
     serve_checknow,
+    serve_registrations,
 )
 from salutebot.models import Prestazione, Slot
 from salutebot.scraper.base import NREInvalidError, ScrapeError, ScrapeResult
@@ -310,6 +311,48 @@ def test_serve_checknow_skips_a_user_already_in_flight(store):
                    failure_counts={}, sleep=lambda _s: None)
     assert scraper.calls == []                                    # already running -> skipped
     assert store.checknow_served_since(_CF, request_ts=1000.0) is False
+
+
+# ----- serve_registrations (D14/D40) -----
+
+def test_registration_ack_resolves_code_and_baselines_a_new_prestazione(store):
+    # A brand-new prestazione (nobody watches 7001.10 yet): the ack scrape resolves it
+    # and baselines its slots as already-seen (no alert), so the first subscriber
+    # starts from "now". (_CODE is already watched by the fixture, so use a fresh one.)
+    prest2 = Prestazione(code="7001.10", descrizione="ECOGRAFIA", quantita=1)
+    eslot = Slot(iso_date="2026-07-01", time="10:00", struttura="OSPEDALE X", cap="10100",
+                 prestazione_code="7001.10", prestazione_desc="ECOGRAFIA", status="PRENOTABILE",
+                 doctor_unit="RADIOLOGIA", address="Via Y, 10100")
+    store.submit_registration(_CF_B, "b@b.it", _NRE_B, now=1000.0)  # a new (unregistered) CF
+    serve_registrations(store, _FakeScraper(ScrapeResult(prest2, [eslot])),
+                        now=1000.0, in_flight=set(), sleep=lambda _s: None)
+    result = store.registration_result(_CF_B, request_ts=1000.0)
+    assert result == {"status": "ok", "code": "7001.10", "desc": "ECOGRAFIA"}
+    assert store.known_slot_keys("7001.10") == {eslot.slot_key}  # baselined (D8, no alert)
+
+
+def test_registration_ack_reports_invalid_nre(store):
+    store.submit_registration(_CF_B, "b@b.it", _NRE_B, now=1000.0)
+    serve_registrations(store, _RotatingScraper(dead={_NRE_B}),
+                        now=1000.0, in_flight=set(), sleep=lambda _s: None)
+    assert store.registration_result(_CF_B, request_ts=1000.0)["status"] == "invalid"
+
+
+def test_registration_ack_reports_transient_error(store):
+    store.submit_registration(_CF_B, "b@b.it", _NRE_B, now=1000.0)
+    serve_registrations(store, _FakeScraper(raises=ScrapeError("x")),
+                        now=1000.0, in_flight=set(), sleep=lambda _s: None)
+    assert store.registration_result(_CF_B, request_ts=1000.0)["status"] == "error"
+
+
+def test_registration_ack_does_not_baseline_an_already_watched_prestazione(store):
+    # _CF already watches _CODE (fixture). A second person's ack must NOT baseline —
+    # its slots stay unpersisted so the sweep still alerts the existing subscriber.
+    store.submit_registration(_CF_B, "b@b.it", _NRE_B, now=1000.0)
+    serve_registrations(store, _FakeScraper(ScrapeResult(_PREST, [_slot()])),
+                        now=1000.0, in_flight=set(), sleep=lambda _s: None)
+    assert store.registration_result(_CF_B, request_ts=1000.0)["status"] == "ok"
+    assert store.known_slot_keys(_CODE) == set()  # not baselined (existing subscriber, D40)
 
 
 # ----- per-prestazione heartbeat (D11, Finding 2) -----
