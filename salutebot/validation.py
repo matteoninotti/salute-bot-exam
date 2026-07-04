@@ -39,7 +39,7 @@ def validate_cf(cf: str) -> str:
     """
     normalized = cf.strip().upper()
     if not _CF_RE.match(normalized):
-        raise ValueError("CF format invalid (expected a 16-character Italian Codice Fiscale).")
+        raise ValueError("Formato CF non valido (atteso un Codice Fiscale italiano di 16 caratteri).")
     return normalized
 
 
@@ -63,7 +63,7 @@ def validate_nre(nre: str) -> str:
     normalized = "".join(nre.split()).upper()
     if not _NRE_RE.match(normalized):
         raise ValueError(
-            "NRE format invalid (expected the full 15-character ricetta code — "
-            "a 5-character prefix followed by 10 digits)."
+            "Formato NRE non valido (atteso il codice ricetta completo di 15 caratteri "
+            "— un prefisso di 5 caratteri seguito da 10 cifre)."
         )
     return normalized

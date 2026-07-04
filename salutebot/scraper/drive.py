@@ -233,27 +233,27 @@ def _smoke(argv: list[str] | None = None) -> None:
     from salutebot.validation import validate_cf, validate_nre
 
     cf_raw = os.environ.get("SALUTEBOT_SMOKE_CF") or input("Codice Fiscale: ")
-    nre_raw = os.environ.get("SALUTEBOT_SMOKE_NRE") or input("NRE (full 15-char code, e.g. 010A3 + 10 digits): ")
+    nre_raw = os.environ.get("SALUTEBOT_SMOKE_NRE") or input("NRE (codice completo di 15 caratteri, es. 010A3 + 10 cifre): ")
     try:
         cf, nre = validate_cf(cf_raw), validate_nre(nre_raw)
     except ValueError as err:
-        print(f"input rejected: {err}")
+        print(f"input rifiutato: {err}")
         return
 
-    print("driving the CUP flow (headless) — this can take a few seconds...")
+    print("avvio del flusso CUP (headless) — può richiedere qualche secondo...")
     try:
         result = LiveScraper.from_env().scrape(cf, nre)
     except ScrapeError as err:
-        print(f"scrape failed (transient): {err}")
+        print(f"scraping fallito (temporaneo): {err}")
         return
 
     p = result.prestazione
     print(f"\nprestazione: {p.descrizione} ({p.code})  quantità={p.quantita}")
-    print(f"slots found: {len(result.slots)}")
+    print(f"posti trovati: {len(result.slots)}")
     for slot in result.slots[:5]:
         print(f"  {slot.iso_date} {slot.time} — {slot.struttura} [{slot.cap}]")
     if len(result.slots) > 5:
-        print(f"  … and {len(result.slots) - 5} more")
+        print(f"  … e altri {len(result.slots) - 5}")
 
 
 if __name__ == "__main__":
