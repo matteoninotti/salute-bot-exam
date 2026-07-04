@@ -241,14 +241,14 @@ def test_single_dead_nre_goes_dormant_and_deactivates(store):
 # ----- run_sweep + the floor -----
 
 def test_sweep_skips_a_prestazione_within_the_floor(store):
-    store.set_last_scrape_at(_CODE, now=1000.0)
+    store.claim_prestazione(_CODE, now=1000.0, floor=FLOOR_SECONDS)
     scraper = _FakeScraper(ScrapeResult(_PREST, [_slot()]))
     run_sweep(store, scraper, _FakeMailer(), now=1000.0 + FLOOR_SECONDS - 1)  # too soon
     assert scraper.calls == []
 
 
 def test_sweep_scrapes_once_the_floor_has_elapsed(store):
-    store.set_last_scrape_at(_CODE, now=1000.0)
+    store.claim_prestazione(_CODE, now=1000.0, floor=FLOOR_SECONDS)
     scraper = _FakeScraper(ScrapeResult(_PREST, [_slot()]))
     run_sweep(store, scraper, _FakeMailer(), now=1000.0 + FLOOR_SECONDS)
     assert len(scraper.calls) == 1
@@ -261,7 +261,7 @@ def test_next_due_is_zero_for_a_never_scraped_prestazione(store):
 
 
 def test_next_due_is_remaining_floor_after_a_scrape(store):
-    store.set_last_scrape_at(_CODE, now=1000.0)
+    store.claim_prestazione(_CODE, now=1000.0, floor=FLOOR_SECONDS)
     assert seconds_until_next_due(store, now=1000.0 + 30) == FLOOR_SECONDS - 30
 
 

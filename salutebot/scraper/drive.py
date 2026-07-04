@@ -268,7 +268,7 @@ class LiveScraper:
             pass
 
 def _smoke(argv: list[str] | None = None) -> None:
-    """Live smoke run (D-Phase-4): one real scrape, secrets from env or a no-echo prompt,
+    """Live smoke run (D-Phase-4): one real scrape, secrets from env or a visible prompt,
     printing only the resolved prestazione + slot summary (never the CF/NRE).
 
     Usage: `SALUTEBOT_SMOKE_CF=... SALUTEBOT_SMOKE_NRE=... python -m salutebot.scraper.drive`

@@ -2,7 +2,7 @@
 
 Drives `cli.main` with an injected in-memory Store and scripted `read`/`write`,
 so the whole flow is exercised without a TTY. Covers only the no-scrape commands
-the CLI owns (D27); new-user registration is deferred and asserted to say so.
+the CLI owns (D27), plus the daemon-driven registration acknowledgment path (D40).
 """
 
 import pytest
@@ -10,7 +10,7 @@ from cryptography.fernet import Fernet
 
 from salutebot.cli import main
 from salutebot.crypto import Crypto
-from salutebot.daemon import serve_registrations
+from salutebot.daemon import serve_registrations, write_heartbeat
 from salutebot.models import Prestazione, Slot
 from salutebot.scraper.base import NREInvalidError, ScrapeResult
 from salutebot.store import Store
@@ -214,7 +214,13 @@ def _daemon_sleep(store, scraper):
     return _sleep
 
 
-def test_new_user_registration_end_to_end(store):
+def _fresh_heartbeat(tmp_path):
+    path = tmp_path / "hb"
+    write_heartbeat(str(path), now=1000.0)
+    return str(path)
+
+
+def test_new_user_registration_end_to_end(store, tmp_path):
     # Register for a brand-new prestazione (7001.10) so the ack baselines + shows its
     # initial slot (_CODE is already watched by the fixture, so it wouldn't baseline).
     prest2 = Prestazione(code="7001.10", descrizione="ECOGRAFIA", quantita=1)
@@ -222,7 +228,8 @@ def test_new_user_registration_end_to_end(store):
     out = _Writer()
     main([], store=store,
          read=_scripted(_UNREGISTERED, "new@user.it", "010A31234567890", "y"),
-         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper))
+         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper),
+         heartbeat_path=_fresh_heartbeat(tmp_path))
     text = out.text
     assert "Verifica della ricetta" in text
     assert "ECOGRAFIA" in text and "7001.10" in text
@@ -233,21 +240,23 @@ def test_new_user_registration_end_to_end(store):
     assert targets and targets[0]["code"] == "7001.10" and targets[0]["active"] == 1
 
 
-def test_registration_reject_saves_nothing(store):
+def test_registration_reject_saves_nothing(store, tmp_path):
     out = _Writer()
     main([], store=store,
          read=_scripted(_UNREGISTERED, "new@user.it", "010A31234567890", "n"),
-         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, _AckScraper()))
+         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, _AckScraper()),
+         heartbeat_path=_fresh_heartbeat(tmp_path))
     assert "Nulla è stato salvato" in out.text
     assert store.user_exists(_UNREGISTERED) is False
 
 
-def test_registration_reports_invalid_ricetta(store):
+def test_registration_reports_invalid_ricetta(store, tmp_path):
     scraper = _AckScraper(raises=NREInvalidError("expired"))
     out = _Writer()
     main([], store=store,
          read=_scripted(_UNREGISTERED, "new@user.it", "010A31234567890"),
-         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper))
+         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper),
+         heartbeat_path=_fresh_heartbeat(tmp_path))
     assert "non è valida" in out.text
     assert store.user_exists(_UNREGISTERED) is False
 
@@ -258,13 +267,24 @@ def test_registration_rejects_bad_email(store):
     assert store.user_exists(_UNREGISTERED) is False
 
 
-def test_existing_user_adds_a_prestazione_from_the_menu(store):
+def test_registration_without_running_daemon_exits_instead_of_hanging(store, tmp_path):
+    out = _Writer()
+    main([], store=store,
+         read=_scripted(_UNREGISTERED, "new@user.it", "010A31234567890"),
+         write=out, clock=lambda: 1000.0, sleep=_boom_sleep,
+         heartbeat_path=str(tmp_path / "missing-hb"))
+    assert "watcher non risulta in esecuzione" in out.text
+    assert store.user_exists(_UNREGISTERED) is False
+
+
+def test_existing_user_adds_a_prestazione_from_the_menu(store, tmp_path):
     prest2 = Prestazione(code="7001.10", descrizione="ECOGRAFIA", quantita=1)
     scraper = _AckScraper(result=ScrapeResult(prest2, [_ecografia_slot()]))
     out = _Writer()
     main([], store=store,
          read=_scripted(_CF, "010A39999999999", "y"),  # CF, add-NRE, confirm
-         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper))
+         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper),
+         heartbeat_path=_fresh_heartbeat(tmp_path))
     assert "ECOGRAFIA" in out.text and "ora segui" in out.text
     assert {t["code"] for t in store.get_user_targets(_CF)} == {_CODE, "7001.10"}
 

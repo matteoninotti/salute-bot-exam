@@ -22,7 +22,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 
 ## Phase 2 — deterministic core (offline-testable)
 
-- [x] **(M)** Store: SQLite schema — 4 tables `users`/`targets`/`prestazioni`/`slots` (D20) + `users.checknow_requested_at`/`last_checknow_at` (D26)
+- [x] **(M)** Store: SQLite schema — 4 core tables `users`/`targets`/`prestazioni`/`slots` (D20) + `users.checknow_requested_at`/`last_checknow_at` (D26); D40 registration staging added in Phase 3
 - [x] **(M)** Crypto layer (D29): `cf_hash = HMAC-SHA256(cf, hmac_key)` blind index (PK/FK); `cf_enc`/`nre` AEAD; two separate env keys
 - [x] **(M)** Detector: per-prestazione dedup (D8/D20) — `new = current − known` in memory, `last_seen` bumped on present keys; `first_seen` persisted post-send by the fan-out (D36), not by the detector
 - [x] **(M)** Alert fan-out: `slots(new) → targets → users` join; SES email adapter (D10/D15); at-least-once send-then-persist (D36); D32 email (full set, new highlighted)
@@ -36,7 +36,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 - [x] **(M)** Robustness (D11): in-attempt retry + exponential backoff on transient `ScrapeError`; N=3 consecutive failed cycles → subscribers notified; dead-man heartbeat emitted + stale-check/broadcast primitives (external checker wiring → Phase 5)
 - [x] **(M)** Fan-out partial-failure fix (D38, amends D36): persist on ≥1 delivered (kills the one-dead-mailbox spam loop); bounded inline per-recipient send retry + backoff; abandoned recipients surfaced in `FanOutResult.failed`; total-failure batch stays unpersisted (self-heal)
 - [x] **(M)** `--check-now` end-to-end (D24/D26/D25/D39): CLI-owned cooldown + block-poll; daemon serving via the two `users` timestamps; check-now lane served before the sweep each tick; per-prestazione coalescing realized by an **atomic scrape claim** (D39, N>1-safe) rather than an explicit job-queue; idle sleep capped at a 2 s poll tick so the block-poll is answered promptly
-- [x] **(M)** New-user registration + add-prestazione (D14/D40): daemon-driven acknowledgment scrape (NRE→prestazione + initial slots) via a 5th `pending_registrations` staging table; CLI stages an unresolved (CF, NRE), block-polls, confirms, then persists user/target; add-prestazione is an interactive returning-user-menu action (not a flag, D37); brand-new prestazioni are baselined (no alert)
+- [x] **(M)** New-user registration + add-prestazione (D14/D40): daemon-driven acknowledgment scrape (NRE→prestazione + initial slots) via a 5th `pending_registrations` staging table; CLI stages an unresolved (CF, NRE), block-polls only while the daemon heartbeat is fresh, confirms, then persists user/target; add-prestazione is an interactive returning-user-menu action (not a flag, D37); brand-new prestazioni are baselined (no alert)
 
 ## Phase 4 — live drive (riskiest, needs valid NRE)
 

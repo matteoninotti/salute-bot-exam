@@ -1,9 +1,5 @@
 """The watcher daemon — the long-running Service (D21) that scrapes and alerts.
 
-This module currently provides the **single-instance guard** (D27); the
-self-clocking serial loop, representative-NRE rotation, robustness, and
-`--check-now`/registration serving land on top of it in later Phase 3 modules.
-
 Single-instance guard (D27): the daemon takes an **exclusive, non-blocking
 `flock`** on a lockfile at startup and refuses to start if the lock is already
 held. This is a *kernel-owned* lock tied to the open file description, so it
@@ -11,6 +7,9 @@ held. This is a *kernel-owned* lock tied to the open file description, so it
 It composes with systemd (`Restart=always`, one instance, D21): even a stray
 manual launch alongside the managed service cannot spawn a second competing
 scraper, which is what keeps single-flight structural (D27).
+
+The loop itself is self-clocking (D21/D22), serves check-now requests first
+(D39), resolves pending registrations (D40), then sweeps due prestazioni.
 """
 
 import fcntl
@@ -32,6 +31,17 @@ from salutebot.store import Store
 
 _DEFAULT_LOCK_PATH = "/tmp/salute-bot.lock"
 _DEFAULT_HEARTBEAT_PATH = "/tmp/salute-bot.heartbeat"
+_HEARTBEAT_PATH_VAR = "SALUTEBOT_HEARTBEAT"
+
+
+def resolve_heartbeat_path(env: "os._Environ | dict[str, str] | None" = None) -> str:
+    """The heartbeat file location, `SALUTEBOT_HEARTBEAT`-overridable (D11).
+
+    Shared by the daemon (which writes it) and the CLI (which reads it to tell
+    whether the watcher is alive before block-polling, D24) — they MUST agree on
+    the path, so both resolve it here rather than hard-coding the default twice."""
+    src = os.environ if env is None else env
+    return src.get(_HEARTBEAT_PATH_VAR, _DEFAULT_HEARTBEAT_PATH)
 
 # Dead-man (D11). The daemon rewrites the heartbeat at the top of every loop pass
 # AND after each prestazione it processes (per-prestazione, not once per sweep), so
@@ -377,7 +387,7 @@ def run(
     mailer: Mailer,
     *,
     lock_path: str = _DEFAULT_LOCK_PATH,
-    heartbeat_path: str = _DEFAULT_HEARTBEAT_PATH,
+    heartbeat_path: str | None = None,
     clock=time.time,
     sleep=time.sleep,
 ) -> None:
@@ -392,9 +402,10 @@ def run(
     failure_counts: dict[str, int] = {}
     in_flight: set[str] = set()
     reg_in_flight: set[str] = set()
+    resolved_heartbeat_path = resolve_heartbeat_path() if heartbeat_path is None else heartbeat_path
 
     def beat() -> None:  # rewrite the dead-man heartbeat with a fresh timestamp (D11)
-        write_heartbeat(heartbeat_path, clock())
+        write_heartbeat(resolved_heartbeat_path, clock())
 
     with single_instance_lock(lock_path):
         while True:
