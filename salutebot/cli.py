@@ -88,7 +88,8 @@ def _build_parser() -> argparse.ArgumentParser:
 def _dispatch(args, store: Store, read, write, clock, sleep, heartbeat_path: str) -> None:
     if args.check_now:
         _with_user(args.user, store, read, write,
-                   lambda s, cf, w: _cmd_check_now(s, cf, w, clock=clock, sleep=sleep))
+                   lambda s, cf, w: _cmd_check_now(s, cf, w, clock=clock, sleep=sleep,
+                                                   heartbeat_path=heartbeat_path))
     elif args.list:
         _with_user(args.user, store, read, write, _cmd_list)
     elif args.disable:
@@ -146,23 +147,31 @@ def _cmd_list(store: Store, cf: str, write) -> None:
         write(f"  {row['iso_date']} {row['time']} — {where}")
 
 
-def _cmd_check_now(store: Store, cf: str, write, *, clock, sleep) -> None:
+def _cmd_check_now(store: Store, cf: str, write, *, clock, sleep, heartbeat_path: str) -> None:
     """Ask the daemon to refresh this user's prestazioni now, then print them (D24/D26).
 
     The CLI owns the cooldown (D26): a 2nd fire within 5 min (D23) prints only the
     remaining cooldown and exits — no request, no wait. Otherwise it records the fire
     and **blocks** (D24, no email fallback) until the daemon signals completion
-    (`last_checknow_at > this request`), then shows the user's current slots. Requires
-    the watcher daemon to be running; with none, it waits (D24 is strictly blocking)."""
+    (`last_checknow_at > this request`), then shows the user's current slots. "Strictly
+    blocking" (D24) is refined by D46 to mean *while the watcher is alive*: if the daemon
+    heartbeat is stale — before firing or during the wait — it refuses instead of hanging
+    forever (there is no one to serve the request), mirroring registration (D40)."""
     remaining = store.checknow_cooldown_remaining(cf, clock(), COOLDOWN_SECONDS)
     if remaining > 0:
         write(f"Controllo immediato in pausa — riprova tra {math.ceil(remaining)}s.")
+        return
+    if _daemon_unavailable(heartbeat_path, clock()):  # down before firing → don't consume the cooldown
+        _write_daemon_unavailable(write)
         return
     request_ts = clock()
     store.accept_checknow(cf, request_ts)
     write("Controllo immediato in coda — potrebbe richiedere qualche istante...")
     while not store.checknow_served_since(cf, request_ts):
         sleep(_CHECKNOW_POLL)
+        if _daemon_unavailable(heartbeat_path, clock()):  # died mid-wait → stop waiting
+            _write_daemon_unavailable(write)
+            return
     _cmd_list(store, cf, write)
 
 
@@ -274,7 +283,7 @@ def _run_ack(
     to block when the daemon heartbeat is stale. On 'invalid'/'error' nothing is saved;
     on confirm it writes the user (if new) and the target."""
     if _daemon_unavailable(heartbeat_path, clock()):
-        _write_daemon_unavailable(write)
+        _write_daemon_unavailable(write, nothing_saved=True)
         return
     request_ts = clock()
     store.submit_registration(cf, email, nre, request_ts)
@@ -284,7 +293,7 @@ def _run_ack(
         sleep(_CHECKNOW_POLL)
         if _daemon_unavailable(heartbeat_path, clock()):
             store.clear_registration(cf)
-            _write_daemon_unavailable(write)
+            _write_daemon_unavailable(write, nothing_saved=True)
             return
         result = store.registration_result(cf, request_ts)
 
@@ -313,12 +322,16 @@ def _run_ack(
 
 
 def _daemon_unavailable(heartbeat_path: str, now: float) -> bool:
-    """Registration waits only while the watcher heartbeat is fresh."""
+    """True when the watcher's heartbeat is stale/absent (D46) — the blocking
+    commands (registration, `--check-now`) only wait while the daemon is alive."""
     return heartbeat_is_stale(heartbeat_path, now)
 
 
-def _write_daemon_unavailable(write) -> None:
-    write("Il watcher non risulta in esecuzione. Avvia il daemon e riprova. Nulla è stato salvato.")
+def _write_daemon_unavailable(write, *, nothing_saved: bool = False) -> None:
+    msg = "Il watcher non risulta in esecuzione. Avvia il daemon e riprova."
+    if nothing_saved:  # registration would have persisted a target; check-now saves nothing
+        msg += " Nulla è stato salvato."
+    write(msg)
 
 
 def _print_code_slots(store: Store, code: str, write) -> None:

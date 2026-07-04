@@ -153,7 +153,7 @@ def _boom_sleep(_seconds):
     raise AssertionError("check-now must not block while on cooldown")
 
 
-def test_check_now_queues_then_prints_results_when_served(store):
+def test_check_now_queues_then_prints_results_when_served(store, tmp_path):
     store.record_new_slots(_CODE, [_slot()], now=900.0)  # slots already present
     out = _Writer()
 
@@ -163,13 +163,27 @@ def test_check_now_queues_then_prints_results_when_served(store):
         store.mark_checknow_done(store._Store__crypto.hash_cf(_CF), now=1001.0)
 
     main(["-u", _CF, "--check-now"], store=store, read=_scripted(), write=out,
-         clock=lambda: 1000.0, sleep=fake_sleep)
+         clock=lambda: 1000.0, sleep=fake_sleep, heartbeat_path=_fresh_heartbeat(tmp_path))
 
     assert "coda" in out.text.lower()
     assert "2026-06-22" in out.text and "MONGINEVRO" in out.text  # results after completion
     assert store._Store__conn.execute(
         "SELECT checknow_requested_at FROM users WHERE cf_hash = ?",
         (store._Store__crypto.hash_cf(_CF),)).fetchone()[0] == 1000.0  # fire recorded
+
+
+def test_check_now_without_running_daemon_exits_instead_of_hanging(store, tmp_path):
+    # No fresh heartbeat → the watcher looks dead, so check-now refuses rather than
+    # block-polling forever (D46 refines D24). The cooldown anchor is NOT consumed.
+    out = _Writer()
+    main(["-u", _CF, "--check-now"], store=store, read=_scripted(), write=out,
+         clock=lambda: 1000.0, sleep=_boom_sleep,
+         heartbeat_path=str(tmp_path / "missing-hb"))
+    assert "watcher non risulta in esecuzione" in out.text
+    assert "coda" not in out.text.lower()  # never queued
+    assert store._Store__conn.execute(
+        "SELECT checknow_requested_at FROM users WHERE cf_hash = ?",
+        (store._Store__crypto.hash_cf(_CF),)).fetchone()[0] is None  # no fire recorded
 
 
 def test_check_now_on_cooldown_prints_only_remaining(store):
