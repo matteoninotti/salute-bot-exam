@@ -40,9 +40,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 
 ## Phase 4 — live drive (riskiest, needs valid NRE)
 
-- [ ] **(M)** Scraper drive: Playwright headless Chromium through the stateful JSF flow (GET seed → form → Prosegui ×2 → Avanti → extend area → harvest); live token capture (ViewState/p_auth/ice.\*)
-- [ ] **(M)** Live smoke run (Matteo, local, secrets via env/stdin) — confirm flow still matches June-23 recon
-- [ ] Resolve residuals: NRE input box count (§3), exact "NRE invalid" wire signal (D28)
+- [~] **(M)** Scraper drive (D42): `LiveScraper` — Playwright headless Chromium through the stateful JSF flow (seed → form → visible "Avanti"/`nreButton` → epPrestazioni → "Avanti" → `nextArea` widest area → harvest `availableAppointmentsContainer`); browser harvests ViewState/p_auth/ice.* itself. Selectors grounded in `flow.har` + live form DOM; form-page selectors live-verified (no secrets); dynamic points marked `SMOKE-CONFIRM`
+- [ ] **(M)** Live smoke run (Matteo, local, secrets via env/stdin): `python -m salutebot.scraper.drive` — confirm the full flow end-to-end; tune the SMOKE-CONFIRM points (proceed 1× vs 2×, warning dialog, settle wait)
+- [x] NRE input box count = 1 (§3/D42). — [ ] exact "NRE invalid" wire signal (D28): capture from the physical dead ricetta in the smoke run → wire `_check_invalid_nre` (rotation dormant until then)
 - [ ] **(C)** HAR-replay harness for offline drive testing (`recon/flow.har`)
 
 ## Phase 5 — demo / ship
