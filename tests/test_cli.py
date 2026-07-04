@@ -221,7 +221,7 @@ def test_new_user_registration_end_to_end(store):
     scraper = _AckScraper(result=ScrapeResult(prest2, [_ecografia_slot()]))
     out = _Writer()
     main([], store=store,
-         read=_scripted(_UNREGISTERED, "new@user.it", "1234567890123456", "y"),
+         read=_scripted(_UNREGISTERED, "new@user.it", "010A31234567890", "y"),
          write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper))
     text = out.text
     assert "Verifying your ricetta" in text
@@ -236,7 +236,7 @@ def test_new_user_registration_end_to_end(store):
 def test_registration_reject_saves_nothing(store):
     out = _Writer()
     main([], store=store,
-         read=_scripted(_UNREGISTERED, "new@user.it", "1234567890123456", "n"),
+         read=_scripted(_UNREGISTERED, "new@user.it", "010A31234567890", "n"),
          write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, _AckScraper()))
     assert "Nothing was saved" in out.text
     assert store.user_exists(_UNREGISTERED) is False
@@ -246,7 +246,7 @@ def test_registration_reports_invalid_ricetta(store):
     scraper = _AckScraper(raises=NREInvalidError("expired"))
     out = _Writer()
     main([], store=store,
-         read=_scripted(_UNREGISTERED, "new@user.it", "1234567890123456"),
+         read=_scripted(_UNREGISTERED, "new@user.it", "010A31234567890"),
          write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper))
     assert "isn't valid" in out.text
     assert store.user_exists(_UNREGISTERED) is False
@@ -263,7 +263,7 @@ def test_existing_user_adds_a_prestazione_from_the_menu(store):
     scraper = _AckScraper(result=ScrapeResult(prest2, [_ecografia_slot()]))
     out = _Writer()
     main([], store=store,
-         read=_scripted(_CF, "9999999999999999", "y"),  # CF, add-NRE, confirm
+         read=_scripted(_CF, "010A39999999999", "y"),  # CF, add-NRE, confirm
          write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper))
     assert "ECOGRAFIA" in out.text and "now watching" in out.text
     assert {t["code"] for t in store.get_user_targets(_CF)} == {_CODE, "7001.10"}

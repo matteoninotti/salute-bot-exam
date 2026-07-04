@@ -198,14 +198,13 @@ def _smoke(argv: list[str] | None = None) -> None:
     printing only the resolved prestazione + slot summary (never the CF/NRE).
 
     Usage: `SALUTEBOT_SMOKE_CF=... SALUTEBOT_SMOKE_NRE=... python -m salutebot.scraper.drive`
-    (or run bare and enter them at the hidden prompts). `SALUTEBOT_HEADFUL=1` shows the
-    browser to watch the flow."""
-    import getpass
-
+    (or run bare and type them at the prompts). Prompts are **visible** — this is a local
+    dev tool, and a prompt is not shell history / argv / a log, so it keeps D35's actual
+    guarantees. `SALUTEBOT_HEADFUL=1` shows the browser so you can watch the flow."""
     from salutebot.validation import validate_cf, validate_nre
 
-    cf_raw = os.environ.get("SALUTEBOT_SMOKE_CF") or getpass.getpass("Codice Fiscale: ")
-    nre_raw = os.environ.get("SALUTEBOT_SMOKE_NRE") or getpass.getpass("NRE: ")
+    cf_raw = os.environ.get("SALUTEBOT_SMOKE_CF") or input("Codice Fiscale: ")
+    nre_raw = os.environ.get("SALUTEBOT_SMOKE_NRE") or input("NRE (full 15-char code, e.g. 010A3 + 10 digits): ")
     try:
         cf, nre = validate_cf(cf_raw), validate_nre(nre_raw)
     except ValueError as err:
