@@ -29,6 +29,7 @@ Points still needing the live smoke run are marked `SMOKE-CONFIRM`.
 import os
 import re
 import sys
+import time
 from collections.abc import Mapping
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -88,6 +89,8 @@ class LiveScraper:
         # full timeout when they legitimately aren't there.
         self.__action_ms = int(action_s * 1000)
         self.__debug = debug  # opt-in step-by-step diagnostics to stderr (no secrets)
+        self.__t0 = 0.0       # flow-start monotonic clock, for timed debug lines
+        self.__t_last = 0.0   # previous debug line's timestamp (for the per-step delta)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "LiveScraper":
@@ -101,9 +104,16 @@ class LiveScraper:
         return cls(headless=not headful, timeout_s=timeout, debug=debug)
 
     def __log(self, message: str) -> None:
-        """Print a diagnostic line when `debug` is on (opt-in; labels + counts, no secrets)."""
-        if self.__debug:
-            print(f"[debug] {message}", file=sys.stderr)
+        """Print a timed diagnostic line when `debug` is on (opt-in; labels + counts, no
+        secrets). Each line shows total elapsed since flow start and Δ since the last line,
+        so slow steps are visible in the output itself."""
+        if not self.__debug:
+            return
+        now = time.monotonic()
+        total = now - self.__t0
+        delta = now - self.__t_last
+        self.__t_last = now
+        print(f"[debug] [{total:6.1f}s  Δ{delta:5.1f}s]  {message}", file=sys.stderr)
 
     def scrape(self, cf: str, nre: str) -> ScrapeResult:
         """Run the full flow once and return the prestazione + current slots.
@@ -130,6 +140,7 @@ class LiveScraper:
     # ----- flow steps (each grounded in the HAR; SMOKE-CONFIRM where dynamic) -----
 
     def __run_flow(self, page, cf: str, nre: str) -> ScrapeResult:
+        self.__t0 = self.__t_last = time.monotonic()          # start the debug clock
         page.goto(_SEED_URL, wait_until="domcontentloaded")   # seed session cookies
         page.goto(_FORM_URL, wait_until="domcontentloaded")   # the CF+NRE form
         self.__log("form loaded")
