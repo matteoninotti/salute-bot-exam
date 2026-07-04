@@ -312,6 +312,19 @@ def test_serve_checknow_skips_a_user_already_in_flight(store):
     assert store.checknow_served_since(_CF, request_ts=1000.0) is False
 
 
+# ----- per-prestazione heartbeat (D11, Finding 2) -----
+
+def test_sweep_beats_the_heartbeat_once_per_prestazione(store):
+    # A long sweep must refresh liveness between prestazioni, not once per sweep, so
+    # its unbounded duration can't be mistaken for a dead watcher (D11).
+    prest2 = Prestazione(code="7001.10", descrizione="ECOGRAFIA", quantita=1)
+    store.add_target(_CF, prest2, "3333333333333333")  # a 2nd due prestazione
+    beats: list[int] = []
+    run_sweep(store, _FakeScraper(ScrapeResult(_PREST, [_slot()])), _FakeMailer(),
+              now=1000.0, sleep=lambda _s: None, heartbeat=lambda: beats.append(1))
+    assert len(beats) == 2  # one beat per prestazione processed
+
+
 # ----- run (one iteration, broken out via sleep) -----
 
 class _Stop(Exception):

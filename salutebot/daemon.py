@@ -33,11 +33,14 @@ from salutebot.store import Store
 _DEFAULT_LOCK_PATH = "/tmp/salute-bot.lock"
 _DEFAULT_HEARTBEAT_PATH = "/tmp/salute-bot.heartbeat"
 
-# Dead-man (D11). The daemon rewrites the heartbeat at the top of every loop pass;
-# an EXTERNAL checker (systemd/cron, Phase 5) reads it and, if older than this,
-# broadcasts that the watcher is down. Must exceed the longest loop gap — the idle
-# sleep is FLOOR_SECONDS (120s) — so a healthy-but-idle daemon is never mistaken
-# for dead; 300s leaves generous margin.
+# Dead-man (D11). The daemon rewrites the heartbeat at the top of every loop pass
+# AND after each prestazione it processes (per-prestazione, not once per sweep), so
+# the max gap between beats is one scrape — a few seconds at most — not a whole
+# sweep, whose duration is unbounded (many prestazioni × live scrape + retry
+# backoff). An EXTERNAL checker (systemd/cron, Phase 5) reads the heartbeat and, if
+# older than this, broadcasts that the watcher is down. 300s dwarfs both the beat
+# gap (one scrape) and the capped idle poll (CHECKNOW_POLL_INTERVAL), so a healthy
+# daemon — busy or idle — is never mistaken for dead.
 HEARTBEAT_MAX_AGE = 300.0
 
 # The politeness floor (D22): a single prestazione is scraped at most once per this
@@ -186,6 +189,7 @@ def _notify_nre_invalid(store: Store, mailer: Mailer, cf: str, code: str) -> Non
 def run_sweep(
     store: Store, scraper: Scraper, mailer: Mailer, now: float,
     *, failure_counts: dict[str, int] | None = None, sleep=time.sleep,
+    heartbeat=lambda: None,
 ) -> None:
     """One pass over the non-dormant prestazioni (D19/D21): scrape each one that is
     **due** under the 2-min floor (D22), one at a time (D27). Prestazioni scraped
@@ -194,7 +198,8 @@ def run_sweep(
     `failure_counts` (owned by `run`, passed in so it persists across sweeps) tracks
     consecutive transient failures per prestazione: at `FAILURE_NOTIFY_THRESHOLD`
     (~6 min) the subscribers are told watching is currently broken; a success resets
-    the count (D11)."""
+    the count (D11). `heartbeat` is called after each prestazione so a long sweep
+    keeps the dead-man liveness fresh (D11, Finding 2)."""
     counts = failure_counts if failure_counts is not None else {}
     for row in store.non_dormant_prestazioni():
         last = row["last_scrape_at"]
@@ -202,6 +207,7 @@ def run_sweep(
             code = row["code"]
             status = process_prestazione(store, scraper, mailer, code, now, sleep=sleep)
             _record_cycle_outcome(store, mailer, counts, code, status)
+            heartbeat()  # per-prestazione liveness — a long sweep can't look dead (D11)
 
 
 def _record_cycle_outcome(
@@ -235,6 +241,7 @@ def _notify_watch_failing(store: Store, mailer: Mailer, code: str) -> None:
 def serve_checknow(
     store: Store, scraper: Scraper, mailer: Mailer, now: float,
     *, in_flight: set[str], failure_counts: dict[str, int], sleep=time.sleep,
+    heartbeat=lambda: None,
 ) -> None:
     """Serve outstanding `--check-now` requests, ahead of the sweep (D25/D26).
 
@@ -243,7 +250,8 @@ def serve_checknow(
     via the claim, not re-scraped — D23/D39), then set `last_checknow_at = now` so the
     blocking CLI unblocks — **even on scrape failure** (failure is coarse; the CLI
     prints whatever slots exist, D26). `in_flight` (owned by `run`, in memory per D26)
-    guards against re-picking a request already being served; a crash just re-runs it."""
+    guards against re-picking a request already being served; a crash just re-runs it.
+    `heartbeat` is called after each scrape so a long batch keeps liveness fresh (D11)."""
     for cf_hash, codes in store.outstanding_checknow():
         if cf_hash in in_flight:
             continue
@@ -252,6 +260,7 @@ def serve_checknow(
             for code in codes:
                 status = process_prestazione(store, scraper, mailer, code, now, sleep=sleep)
                 _record_cycle_outcome(store, mailer, failure_counts, code, status)
+                heartbeat()  # per-prestazione liveness during a long batch (D11)
             store.mark_checknow_done(cf_hash, now)
         finally:
             in_flight.discard(cf_hash)
@@ -330,12 +339,17 @@ def run(
     # harmless (systemd restarts, and the streak / in-flight simply restart too).
     failure_counts: dict[str, int] = {}
     in_flight: set[str] = set()
+
+    def beat() -> None:  # rewrite the dead-man heartbeat with a fresh timestamp (D11)
+        write_heartbeat(heartbeat_path, clock())
+
     with single_instance_lock(lock_path):
         while True:
-            write_heartbeat(heartbeat_path, clock())  # liveness for the dead-man (D11)
+            beat()  # liveness at the top of every tick (D11)
             serve_checknow(store, scraper, mailer, clock(), in_flight=in_flight,
-                           failure_counts=failure_counts, sleep=sleep)  # lane first (D25)
-            run_sweep(store, scraper, mailer, clock(), failure_counts=failure_counts, sleep=sleep)
+                           failure_counts=failure_counts, sleep=sleep, heartbeat=beat)  # lane first (D25)
+            run_sweep(store, scraper, mailer, clock(), failure_counts=failure_counts,
+                      sleep=sleep, heartbeat=beat)
             wait = seconds_until_next_due(store, clock())
             # Cap the idle sleep so the next check-now is served within ~POLL_INTERVAL,
             # not up to a full floor (D39). None (nothing watched) → just the poll tick.
