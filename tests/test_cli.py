@@ -10,7 +10,9 @@ from cryptography.fernet import Fernet
 
 from salutebot.cli import main
 from salutebot.crypto import Crypto
+from salutebot.daemon import serve_registrations
 from salutebot.models import Prestazione, Slot
+from salutebot.scraper.base import NREInvalidError, ScrapeResult
 from salutebot.store import Store
 
 _CF = "RSSMRA85T10A562S"
@@ -145,13 +147,128 @@ def test_delete_user_aborts_on_cf_mismatch(store):
     assert store.user_exists(_CF) is True
 
 
-# ----- registration (deferred, D27) -----
+# ----- --check-now (D24/D26) -----
 
-def test_new_user_registration_is_deferred(store):
-    text = _run(store, [], read=_scripted(_UNREGISTERED))
-    assert "isn't available yet" in text
+def _boom_sleep(_seconds):
+    raise AssertionError("check-now must not block while on cooldown")
 
 
-def test_bare_invocation_existing_user_shows_menu(store):
-    text = _run(store, [], read=_scripted(_CF))
+def test_check_now_queues_then_prints_results_when_served(store):
+    store.record_new_slots(_CODE, [_slot()], now=900.0)  # slots already present
+    out = _Writer()
+
+    # A stand-in daemon: the first block-poll sleep marks the request complete, so
+    # the CLI unblocks on its next check and prints the user's slots (D24).
+    def fake_sleep(_seconds):
+        store.mark_checknow_done(store._Store__crypto.hash_cf(_CF), now=1001.0)
+
+    main(["-u", _CF, "--check-now"], store=store, read=_scripted(), write=out,
+         clock=lambda: 1000.0, sleep=fake_sleep)
+
+    assert "queued" in out.text.lower()
+    assert "2026-06-22" in out.text and "MONGINEVRO" in out.text  # results after completion
+    assert store._Store__conn.execute(
+        "SELECT checknow_requested_at FROM users WHERE cf_hash = ?",
+        (store._Store__crypto.hash_cf(_CF),)).fetchone()[0] == 1000.0  # fire recorded
+
+
+def test_check_now_on_cooldown_prints_only_remaining(store):
+    store.accept_checknow(_CF, now=1000.0)  # a recent accepted fire
+    out = _Writer()
+
+    main(["-u", _CF, "--check-now"], store=store, read=_scripted(), write=out,
+         clock=lambda: 1100.0, sleep=_boom_sleep)  # 100s later -> 200s remaining
+
+    assert "cooldown" in out.text.lower() and "200s" in out.text
+    assert "queued" not in out.text.lower()  # rejected: no request, no block (D24)
+
+
+# ----- registration + add-prestazione (D14/D40, daemon-driven ack scrape) -----
+
+def _ecografia_slot():
+    return Slot(
+        iso_date="2026-07-01", time="10:00", struttura="OSPEDALE X", cap="10100",
+        prestazione_code="7001.10", prestazione_desc="ECOGRAFIA", status="PRENOTABILE",
+        doctor_unit="RADIOLOGIA", address="Via Y, 10100",
+    )
+
+
+class _AckScraper:
+    """Stands in for the Phase-4 live scraper: resolves an NRE to a fixed result."""
+
+    def __init__(self, result=None, raises=None):
+        self.__result = result if result is not None else ScrapeResult(_PREST, [_slot()])
+        self.__raises = raises
+
+    def scrape(self, cf, nre):
+        if self.__raises is not None:
+            raise self.__raises
+        return self.__result
+
+
+def _daemon_sleep(store, scraper):
+    """A fake CLI `sleep` that runs one real `serve_registrations` pass — i.e. the
+    daemon resolves the pending ack while the CLI is blocked polling."""
+    def _sleep(_seconds):
+        serve_registrations(store, scraper, now=1000.0, in_flight=set(), sleep=lambda _s: None)
+    return _sleep
+
+
+def test_new_user_registration_end_to_end(store):
+    # Register for a brand-new prestazione (7001.10) so the ack baselines + shows its
+    # initial slot (_CODE is already watched by the fixture, so it wouldn't baseline).
+    prest2 = Prestazione(code="7001.10", descrizione="ECOGRAFIA", quantita=1)
+    scraper = _AckScraper(result=ScrapeResult(prest2, [_ecografia_slot()]))
+    out = _Writer()
+    main([], store=store,
+         read=_scripted(_UNREGISTERED, "new@user.it", "1234567890123456", "y"),
+         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper))
+    text = out.text
+    assert "Verifying your ricetta" in text
+    assert "ECOGRAFIA" in text and "7001.10" in text
+    assert "2026-07-01" in text          # initial slot shown for confirmation (D14)
+    assert "now watching" in text
+    assert store.user_exists(_UNREGISTERED)
+    targets = store.get_user_targets(_UNREGISTERED)
+    assert targets and targets[0]["code"] == "7001.10" and targets[0]["active"] == 1
+
+
+def test_registration_reject_saves_nothing(store):
+    out = _Writer()
+    main([], store=store,
+         read=_scripted(_UNREGISTERED, "new@user.it", "1234567890123456", "n"),
+         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, _AckScraper()))
+    assert "Nothing was saved" in out.text
+    assert store.user_exists(_UNREGISTERED) is False
+
+
+def test_registration_reports_invalid_ricetta(store):
+    scraper = _AckScraper(raises=NREInvalidError("expired"))
+    out = _Writer()
+    main([], store=store,
+         read=_scripted(_UNREGISTERED, "new@user.it", "1234567890123456"),
+         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper))
+    assert "isn't valid" in out.text
+    assert store.user_exists(_UNREGISTERED) is False
+
+
+def test_registration_rejects_bad_email(store):
+    text = _run(store, [], read=_scripted(_UNREGISTERED, "not-an-email"))
+    assert "doesn't look like an email" in text
+    assert store.user_exists(_UNREGISTERED) is False
+
+
+def test_existing_user_adds_a_prestazione_from_the_menu(store):
+    prest2 = Prestazione(code="7001.10", descrizione="ECOGRAFIA", quantita=1)
+    scraper = _AckScraper(result=ScrapeResult(prest2, [_ecografia_slot()]))
+    out = _Writer()
+    main([], store=store,
+         read=_scripted(_CF, "9999999999999999", "y"),  # CF, add-NRE, confirm
+         write=out, clock=lambda: 1000.0, sleep=_daemon_sleep(store, scraper))
+    assert "ECOGRAFIA" in out.text and "now watching" in out.text
+    assert {t["code"] for t in store.get_user_targets(_CF)} == {_CODE, "7001.10"}
+
+
+def test_bare_invocation_existing_user_shows_menu_then_offers_add(store):
+    text = _run(store, [], read=_scripted(_CF, ""))  # CF, then skip the add prompt
     assert "Welcome back" in text and _CODE in text

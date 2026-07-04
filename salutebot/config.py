@@ -11,6 +11,7 @@ the crypto library call (AEAD primitive, HMAC construction) is chosen.
 """
 
 import os
+from collections.abc import Mapping
 
 
 class MissingEnvKeyError(RuntimeError):
@@ -31,11 +32,12 @@ class EnvConfig:
     __ENC_KEY_VAR = "SALUTEBOT_ENC_KEY"
     __HMAC_KEY_VAR = "SALUTEBOT_HMAC_KEY"
 
-    def __init__(self, env: dict[str, str] | None = None) -> None:
+    def __init__(self, env: Mapping[str, str] | None = None) -> None:
         """Load both keys from `env` (defaults to `os.environ`).
 
         The `env` parameter exists so tests can pass a hermetic dict instead of
-        mutating the real process environment.
+        mutating the real process environment. Typed as `Mapping`, not `dict`:
+        `os.environ` is an `os._Environ`, which does not subclass `dict`.
         """
         source = env if env is not None else os.environ
         self.__enc_key = self.__require(source, self.__ENC_KEY_VAR)
@@ -48,7 +50,7 @@ class EnvConfig:
             )
 
     @staticmethod
-    def __require(source: dict[str, str], var_name: str) -> str:
+    def __require(source: Mapping[str, str], var_name: str) -> str:
         value = source.get(var_name)
         if not value:
             raise MissingEnvKeyError(

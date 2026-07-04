@@ -29,6 +29,8 @@ def _slot(iso_date="2026-06-22", time_="16:00", struttura="POLIAMBULATORIO MONGI
 
 
 _PREST = Prestazione(code="8901.20", descrizione="VISITA UROLOGICA DI CONTROLLO", quantita=1)
+_PREST2 = Prestazione(code="7001.10", descrizione="ECOGRAFIA", quantita=1)
+_PREST3 = Prestazione(code="5001.30", descrizione="VISITA CARDIOLOGICA", quantita=1)
 
 
 @pytest.fixture
@@ -100,18 +102,42 @@ def test_add_target_without_user_violates_fk(store):
         store.add_target(_CF, _PREST, _NRE)
 
 
-def test_representative_nre_is_first_active_decrypted(store):
+def test_representative_credential_is_first_active_decrypted(store):
     store.add_user(_CF, "a@b.it")
     store.add_target(_CF, _PREST, _NRE)
-    assert store.representative_nre(_PREST.code) == _NRE
+    assert store.representative_credential(_PREST.code) == (_CF, _NRE)
 
 
-def test_representative_nre_none_when_all_inactive(store):
+def test_representative_credential_none_when_all_inactive(store):
     store.add_user(_CF, "a@b.it")
     store.add_target(_CF, _PREST, _NRE)
     store.deactivate_target(_CF, _PREST.code)
-    assert store.representative_nre(_PREST.code) is None
+    assert store.representative_credential(_PREST.code) is None
     assert store.get_user_targets(_CF)[0]["active"] == 0
+
+
+def test_non_dormant_prestazioni_excludes_zero_active_and_orders_overdue_first(store):
+    store.add_user(_CF, "a@b.it")
+    store.add_target(_CF, _PREST, _NRE)             # 8901.20 — never scraped
+    store.add_target(_CF, _PREST2, "9999888877776666")  # 7001.10 — scraped recently
+    store.set_last_scrape_at(_PREST2.code, now=5000.0)
+    store.add_user(_CF2, "c@d.it")
+    store.add_target(_CF2, _PREST3, "1231231231231231")
+    store.deactivate_target(_CF2, _PREST3.code)     # dormant — excluded
+    rows = store.non_dormant_prestazioni()
+    codes = [r["code"] for r in rows]
+    assert codes == [_PREST.code, _PREST2.code]     # never-scraped first, then oldest
+    assert _PREST3.code not in codes
+
+
+def test_set_last_scrape_at_advances_the_floor_marker(store):
+    store.add_user(_CF, "a@b.it")
+    store.add_target(_CF, _PREST, _NRE)
+    store.set_last_scrape_at(_PREST.code, now=1234.0)
+    row = store._Store__conn.execute(
+        "SELECT last_scrape_at FROM prestazioni WHERE code = ?", (_PREST.code,)
+    ).fetchone()
+    assert row["last_scrape_at"] == 1234.0
 
 
 def test_subscriber_emails_are_active_watchers(store):
@@ -159,3 +185,121 @@ def test_touch_slot_updates_last_seen_only(store):
     ).fetchone()
     assert row["first_seen"] == 1000.0  # permanent, unchanged
     assert row["last_seen"] == 2000.0
+
+
+# ----- atomic scrape claim (D39) -----
+
+_FLOOR = 120.0
+
+
+def test_claim_wins_when_never_scraped_then_loses_within_floor(store):
+    store.add_user(_CF, "a@b.it")
+    store.add_target(_CF, _PREST, _NRE)
+    # First claim wins (last_scrape_at NULL) and advances the mark to `now`.
+    assert store.claim_prestazione(_PREST.code, now=1000.0, floor=_FLOOR) is True
+    # A second claimer within the floor loses (no double-scrape, N>1-safe).
+    assert store.claim_prestazione(_PREST.code, now=1000.0 + _FLOOR - 1, floor=_FLOOR) is False
+    # last_scrape_at was set by the winner and not moved by the loser.
+    row = store._Store__conn.execute(
+        "SELECT last_scrape_at FROM prestazioni WHERE code = ?", (_PREST.code,)
+    ).fetchone()
+    assert row["last_scrape_at"] == 1000.0
+
+
+def test_claim_wins_again_once_the_floor_elapses(store):
+    store.add_user(_CF, "a@b.it")
+    store.add_target(_CF, _PREST, _NRE)
+    assert store.claim_prestazione(_PREST.code, now=1000.0, floor=_FLOOR) is True
+    assert store.claim_prestazione(_PREST.code, now=1000.0 + _FLOOR, floor=_FLOOR) is True
+
+
+# ----- check-now (D24/D26) -----
+
+def test_checknow_cooldown_and_accept(store):
+    store.add_user(_CF, "a@b.it")
+    # Never fired -> free.
+    assert store.checknow_cooldown_remaining(_CF, now=1000.0, cooldown=300.0) == 0.0
+    store.accept_checknow(_CF, now=1000.0)
+    # A 2nd fire 100s later is still on cooldown, with 200s remaining.
+    assert store.checknow_cooldown_remaining(_CF, now=1100.0, cooldown=300.0) == 200.0
+    # After the cooldown elapses, free again.
+    assert store.checknow_cooldown_remaining(_CF, now=1300.0, cooldown=300.0) == 0.0
+
+
+def test_checknow_served_since_tracks_completion(store):
+    store.add_user(_CF, "a@b.it")
+    store.accept_checknow(_CF, now=1000.0)
+    assert store.checknow_served_since(_CF, request_ts=1000.0) is False  # not served yet
+    cf_hash = store._Store__crypto.hash_cf(_CF)
+    store.mark_checknow_done(cf_hash, now=1005.0)
+    assert store.checknow_served_since(_CF, request_ts=1000.0) is True   # completion is newer
+
+
+def test_outstanding_checknow_lists_users_with_their_active_codes(store):
+    store.add_user(_CF, "a@b.it")
+    store.add_target(_CF, _PREST, _NRE)
+    store.add_target(_CF, _PREST2, _NRE)
+    store.deactivate_target(_CF, _PREST2.code)  # inactive -> excluded
+    store.add_user(_CF2, "b@b.it")              # no outstanding fire -> excluded
+    store.accept_checknow(_CF, now=1000.0)
+
+    outstanding = store.outstanding_checknow()
+
+    assert len(outstanding) == 1
+    cf_hash, codes = outstanding[0]
+    assert cf_hash == store._Store__crypto.hash_cf(_CF)
+    assert codes == [_PREST.code]               # only the active target
+    # Once served, it drops out of the outstanding set.
+    store.mark_checknow_done(cf_hash, now=1005.0)
+    assert store.outstanding_checknow() == []
+
+
+# ----- registration staging (D14/D40) -----
+
+def test_submit_registration_stages_encrypted_secrets(store):
+    store.submit_registration(_CF, "a@b.it", _NRE, now=1000.0)
+    row = store._Store__conn.execute(
+        "SELECT cf_enc, nre_enc, resolved_at FROM pending_registrations").fetchone()
+    assert row["cf_enc"] != _CF and row["nre_enc"] != _NRE   # encrypted at rest (D3)
+    assert row["resolved_at"] is None                        # outstanding until the daemon resolves
+    # The daemon reads back the decrypted credential to drive the scrape.
+    outstanding = store.outstanding_registrations()
+    assert outstanding == [(store._Store__crypto.hash_cf(_CF), _CF, _NRE)]
+
+
+def test_registration_result_none_until_resolved_then_returned(store):
+    store.submit_registration(_CF, "a@b.it", _NRE, now=1000.0)
+    assert store.registration_result(_CF, request_ts=1000.0) is None
+    cf_hash = store._Store__crypto.hash_cf(_CF)
+    store.resolve_registration(cf_hash, now=1002.0, status="ok",
+                               code=_PREST.code, desc=_PREST.descrizione)
+    result = store.registration_result(_CF, request_ts=1000.0)
+    assert result == {"status": "ok", "code": _PREST.code, "desc": _PREST.descrizione}
+    assert store.outstanding_registrations() == []           # resolved -> no longer outstanding
+
+
+def test_resubmit_replaces_and_clears_a_prior_result(store):
+    store.submit_registration(_CF, "a@b.it", _NRE, now=1000.0)
+    store.resolve_registration(store._Store__crypto.hash_cf(_CF), now=1001.0, status="invalid")
+    # A fresh fire (e.g. a new ricetta) resets the row and re-opens it for the daemon.
+    store.submit_registration(_CF, "a@b.it", "9999999999", now=2000.0)
+    assert store.registration_result(_CF, request_ts=2000.0) is None
+    assert len(store.outstanding_registrations()) == 1
+    store.clear_registration(_CF)
+    assert store.outstanding_registrations() == []
+
+
+def test_has_active_target_and_upsert_prestazione(store):
+    assert store.has_active_target(_PREST.code) is False
+    store.upsert_prestazione(_PREST)  # exists but nobody watches it yet
+    assert store.has_active_target(_PREST.code) is False
+    store.add_user(_CF, "a@b.it")
+    store.add_target(_CF, _PREST, _NRE)
+    assert store.has_active_target(_PREST.code) is True
+
+
+def test_slots_for_code_reads_without_a_target_join(store):
+    store.upsert_prestazione(_PREST)
+    store.record_new_slots(_PREST.code, [_slot("2026-06-22", "16:00")], now=1000.0)
+    rows = store.slots_for_code(_PREST.code)         # no user/target needed (D20 consequence a)
+    assert len(rows) == 1 and rows[0]["iso_date"] == "2026-06-22"

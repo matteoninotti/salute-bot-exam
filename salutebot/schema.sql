@@ -54,3 +54,21 @@ CREATE TABLE IF NOT EXISTS slots (
     address           TEXT,
     PRIMARY KEY (prestazione, slot_key)               -- slots shared per prestazione (D20)
 );
+
+-- Registration staging (D40). A user's NRE unlocks a prestazione whose code is only
+-- known by scraping it (D33) — a chicken-and-egg the 4 core tables can't hold (a
+-- target needs the code up front). The CLI stages an unresolved (CF, NRE) here; the
+-- daemon (which alone may scrape, D27) resolves the code + baseline slots and writes
+-- the result back; the CLI block-polls, confirms with the user (D14), then writes the
+-- real user/target rows. Transient: rows are deleted once the CLI consumes them.
+CREATE TABLE IF NOT EXISTS pending_registrations (
+    cf_hash        TEXT PRIMARY KEY,                  -- one pending op per user (HMAC, D29); NOT a users FK (user may not exist yet)
+    cf_enc         TEXT NOT NULL,                     -- AEAD (D3) — daemon decrypts to drive the ack scrape
+    email          TEXT NOT NULL,                     -- captured now; written to users only on confirm
+    nre_enc        TEXT NOT NULL,                     -- AEAD (D3)
+    requested_at   REAL NOT NULL,                     -- CLI sets on submit
+    resolved_at    REAL,                              -- daemon sets on completion (NULL = still outstanding)
+    result_status  TEXT,                              -- 'ok' | 'invalid' | 'error' (how the ack scrape ended)
+    result_code    TEXT,                              -- discovered prestazione code ('ok' only)
+    result_desc    TEXT                               -- discovered descrizione ('ok' only)
+);

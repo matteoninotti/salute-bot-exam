@@ -27,15 +27,16 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 - [x] **(M)** Detector: per-prestazione dedup (D8/D20) — `new = current − known` in memory, `last_seen` bumped on present keys; `first_seen` persisted post-send by the fan-out (D36), not by the detector
 - [x] **(M)** Alert fan-out: `slots(new) → targets → users` join; SES email adapter (D10/D15); at-least-once send-then-persist (D36); D32 email (full set, new highlighted)
 - [x] **(M)** CLI management commands (D37): `-u [CF]` (optional, prompt when omitted), `--list`, `--disable` (numbered menu, D35), `--disable-all`, `--delete-user` (erases user rows only, shared `slots` kept per D20), returning-user menu — no-scrape surface (D27), injected-I/O testable
-- [ ] **(M)** CLI new-user registration + add-prestazione (D14): needs the daemon-driven acknowledgment scrape (NRE→prestazione + initial slots) — blocked on Phase 3 daemon per D27; build when the request mechanism is pinned
-- [ ] **(M)** `--check-now`: CLI-owned cooldown + block-poll (D24/D26); daemon serving via two timestamps
-
 ## Phase 3 — daemon / service
 
-- [ ] **(M)** Self-clocking serial loop, N=1 worker pool (D21/D22/D27); 2-min per-prestazione floor
-- [ ] **(M)** `flock` single-instance guard (D27); systemd-friendly long-running process
-- [ ] **(M)** Robustness: retry + backoff on JSF errors, N=3 consecutive fails → notify user; dead-man alert (D11)
-- [ ] **(M)** Representative-NRE lifecycle (D28): first active target drives; rotate on permanent NRE-invalid; email owner; prestazione dormant if none valid
+- [x] **(M)** Scraper seam (Protocol + `ScrapeResult` + typed `NREInvalidError` vs transient `ScrapeError`) so the daemon is testable with a fake before the Phase 4 drive exists (D5/D14/D28)
+- [x] **(M)** `flock` single-instance guard (D27); systemd-friendly long-running process
+- [x] **(M)** Self-clocking serial loop (D21/D22/D27): non-dormant sweep, N=1, 2-min per-prestazione floor (advances on every *attempt* so a failing scrape can't busy-loop), scrape→detect→fan-out; sleeps exactly until next-due
+- [x] **(M)** Representative-NRE lifecycle (D28): first active target drives; rotate on permanent NRE-invalid (deactivate + email owner in Italian), retry next subscriber; prestazione dormant if none valid
+- [x] **(M)** Robustness (D11): in-attempt retry + exponential backoff on transient `ScrapeError`; N=3 consecutive failed cycles → subscribers notified; dead-man heartbeat emitted + stale-check/broadcast primitives (external checker wiring → Phase 5)
+- [x] **(M)** Fan-out partial-failure fix (D38, amends D36): persist on ≥1 delivered (kills the one-dead-mailbox spam loop); bounded inline per-recipient send retry + backoff; abandoned recipients surfaced in `FanOutResult.failed`; total-failure batch stays unpersisted (self-heal)
+- [x] **(M)** `--check-now` end-to-end (D24/D26/D25/D39): CLI-owned cooldown + block-poll; daemon serving via the two `users` timestamps; check-now lane served before the sweep each tick; per-prestazione coalescing realized by an **atomic scrape claim** (D39, N>1-safe) rather than an explicit job-queue; idle sleep capped at a 2 s poll tick so the block-poll is answered promptly
+- [x] **(M)** New-user registration + add-prestazione (D14/D40): daemon-driven acknowledgment scrape (NRE→prestazione + initial slots) via a 5th `pending_registrations` staging table; CLI stages an unresolved (CF, NRE), block-polls, confirms, then persists user/target; add-prestazione is an interactive returning-user-menu action (not a flag, D37); brand-new prestazioni are baselined (no alert)
 
 ## Phase 4 — live drive (riskiest, needs valid NRE)
 
@@ -51,6 +52,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done · **(M)** Must · **(S)**
 - [ ] **(M)** Run on Ubuntu amd64 (platform constraint, D12)
 - [ ] **(M)** CI: GitHub ubuntu-amd64 runner + LocalStack; one real-AWS SES smoke to a verified address (D15)
 - [ ] **(S)** systemd service unit (`Restart=always`, D21)
+- [ ] **(M)** Dead-man checker wiring (D11): external cron/systemd that reads the heartbeat, calls `notify_watcher_down` when stale, with once-per-outage de-dup (primitives already built in Phase 3)
 - [ ] **(S)** EC2 t3.small (amd64) 24/7 deploy (D13)
 - [x] **(S)** Rebuild the PRD doc from log D1–D30 + feasibility (only doc not yet rebuilt)
 
