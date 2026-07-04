@@ -28,6 +28,7 @@ Points still needing the live smoke run are marked `SMOKE-CONFIRM`.
 
 import os
 import re
+import sys
 from collections.abc import Mapping
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -58,6 +59,10 @@ _CONFIRM_ROW = ".prestazioneRow"                             # confirmation pars
 # "altre disponibilità" is a positional j_idt button (id renumbers per render, HAR
 # source `_t385`), so it is matched by its visible label, not its id (SMOKE-CONFIRM).
 _MORE_AVAIL_RE = re.compile(r"altre disponibilit", re.I)
+_SLOT_CARD = "div.disponibiliPanel"                          # one slot card (what the parser reads)
+# Short settle between the two proceed clicks — long enough for the ICEfaces input
+# validation to finish, short enough not to reintroduce the old ~30 s wait.
+_PROCEED_SETTLE_MS = 5000
 
 
 def _sel(element_id: str) -> str:
@@ -73,24 +78,32 @@ class LiveScraper:
     cycle, never persisted) with no state leaking between scrapes."""
 
     def __init__(self, headless: bool = True, timeout_s: float = 60.0,
-                 action_s: float = 10.0) -> None:
+                 action_s: float = 10.0, debug: bool = False) -> None:
         self.__headless = headless
-        # The CUP site is slow (a proceed can take ~30 s incl. reCAPTCHA; the slots page
-        # ~15 s), so the page-transition timeout is generous.
+        # The CUP site is slow (the slots page can take ~15 s), so the page-transition
+        # timeout is generous.
         self.__timeout_ms = int(timeout_s * 1000)
         # Shorter wait for CONDITIONAL controls (the extend-area buttons, the warning
-        # dialog): present on some ricette, absent on others — don't burn the full
-        # timeout when they legitimately aren't there.
+        # dialog, slot cards): present on some ricette, absent on others — don't burn the
+        # full timeout when they legitimately aren't there.
         self.__action_ms = int(action_s * 1000)
+        self.__debug = debug  # opt-in step-by-step diagnostics to stderr (no secrets)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "LiveScraper":
-        """Build from env: `SALUTEBOT_HEADFUL` (truthy → show the browser, for debugging);
-        `SALUTEBOT_SCRAPE_TIMEOUT` (seconds, default 30)."""
+        """Build from env: `SALUTEBOT_HEADFUL` (truthy → show the browser);
+        `SALUTEBOT_SCRAPE_TIMEOUT` (seconds, default 60); `SALUTEBOT_DEBUG` (truthy →
+        print flow diagnostics to stderr — button clicks + card counts, never secrets)."""
         src = os.environ if env is None else env
         headful = (src.get("SALUTEBOT_HEADFUL", "").strip().lower() in ("1", "true", "yes"))
+        debug = (src.get("SALUTEBOT_DEBUG", "").strip().lower() in ("1", "true", "yes"))
         timeout = float(src.get("SALUTEBOT_SCRAPE_TIMEOUT", "60"))
-        return cls(headless=not headful, timeout_s=timeout)
+        return cls(headless=not headful, timeout_s=timeout, debug=debug)
+
+    def __log(self, message: str) -> None:
+        """Print a diagnostic line when `debug` is on (opt-in; labels + counts, no secrets)."""
+        if self.__debug:
+            print(f"[debug] {message}", file=sys.stderr)
 
     def scrape(self, cf: str, nre: str) -> ScrapeResult:
         """Run the full flow once and return the prestazione + current slots.
@@ -119,11 +132,11 @@ class LiveScraper:
     def __run_flow(self, page, cf: str, nre: str) -> ScrapeResult:
         page.goto(_SEED_URL, wait_until="domcontentloaded")   # seed session cookies
         page.goto(_FORM_URL, wait_until="domcontentloaded")   # the CF+NRE form
+        self.__log("form loaded")
 
         page.fill(_sel(_CF_INPUT), cf)
         page.fill(_sel(_NRE_INPUT), nre)
-        page.click(_sel(_SEARCH_BTN))                         # visible "Avanti" (proceed)
-        self.__await_confirmation(page)
+        self.__proceed_to_confirmation(page)
         self.__check_invalid_nre(page)                        # no-op until the signal is confirmed
 
         prestazione = parse_prestazione_confirmation(page.content())
@@ -131,35 +144,38 @@ class LiveScraper:
             # Could be an invalid NRE OR a real flow glitch — treated as transient until
             # the invalid signal is wired (D28 / 2026-07-04 decision). SMOKE-CONFIRM.
             raise ScrapeError("confirmation page had no parseable prestazione")
+        self.__log(f"confirmation reached: {prestazione.code}")
 
         page.click(_sel(_CONFIRM_NEXT))                       # "Avanti" → appuntamenti page
         page.wait_for_selector(_sel(_APPUNTAMENTI_FORM))      # the slots page is up
+        self.__log("appuntamenti page loaded")
         self.__extend_to_widest_area(page)                    # D17
+        self.__await_slot_cards(page)                         # let the slots render (0 is valid)
 
-        page.wait_for_selector(_sel(_SLOTS_CONTAINER))
         container_html = page.locator(_sel(_SLOTS_CONTAINER)).inner_html()
         slots = parse_available_slots(container_html)         # may be [] (valid "no slots")
+        self.__log(f"slot cards in container: {self.__card_count(page)}; parsed slots: {len(slots)}")
         return ScrapeResult(prestazione=prestazione, slots=slots)
 
-    def __await_confirmation(self, page) -> None:
-        """Wait for the epPrestazioni confirmation to render. SMOKE-CONFIRM: recon notes
-        the proceed may take two clicks (the first is an input-validation pass), so the
-        visible button is retried once before giving up. If it never appears, any text in
-        the `nreError0`/`cfError` spans is surfaced in the error — that message is the
-        likely invalid-NRE signal (D28), so a dead-ricetta smoke run captures it for free."""
-        for attempt in range(2):
-            try:
-                page.wait_for_selector(_CONFIRM_ROW, timeout=self.__timeout_ms)
-                return
-            except PlaywrightTimeoutError:
-                if attempt == 0:
-                    page.click(_sel(_SEARCH_BTN))             # second proceed click
-                    continue
-                spans = self.__error_spans(page)
-                raise ScrapeError(
-                    "confirmation never appeared"
-                    + (f" — page said: {spans}" if spans else "")
-                ) from None
+    def __proceed_to_confirmation(self, page) -> None:
+        """Advance the CF+NRE form to the epPrestazioni confirmation.
+
+        The proceed needs **two** clicks (recon + confirmed live): the 1st runs an
+        ICEfaces input-validation pass, the 2nd advances. Clicking twice — with the
+        validation allowed to settle between — avoids waiting out a full timeout after an
+        otherwise-ineffective single click. If the confirmation never appears, any text in
+        the `nreError0`/`cfError` spans is surfaced in the error (the likely invalid-NRE
+        signal, D28 — captured for free by a dead-ricetta smoke run)."""
+        page.click(_sel(_SEARCH_BTN))                         # 1st: input-validation pass
+        self.__settle(page, _PROCEED_SETTLE_MS)               # let the validation ajax finish
+        self.__click_if_present(page, page.locator(_sel(_SEARCH_BTN)))  # 2nd: advance (if still there)
+        try:
+            page.wait_for_selector(_CONFIRM_ROW, timeout=self.__timeout_ms)
+        except PlaywrightTimeoutError:
+            spans = self.__error_spans(page)
+            raise ScrapeError(
+                "confirmation never appeared" + (f" — page said: {spans}" if spans else "")
+            ) from None
 
     def __error_spans(self, page) -> str:
         """Combined visible text of the form's validation spans (never a CF/NRE value)."""
@@ -182,11 +198,26 @@ class LiveScraper:
         ricetta with near-home availability may show neither — so each is clicked only if
         present, then the ICEfaces partial-response is allowed to settle. An optional
         warning dialog is confirmed if it appears. SMOKE-CONFIRM: the exact labels + waits."""
-        if self.__click_if_present(page, page.get_by_text(_MORE_AVAIL_RE)):
-            self.__settle(page)
-        if self.__click_if_present(page, page.locator(_sel(_NEXT_AREA))):
-            self.__click_if_present(page, page.locator(_sel(_WARNING_CONFIRM)))  # optional dialog
-            self.__settle(page)
+        more = self.__click_if_present(page, page.get_by_text(_MORE_AVAIL_RE))
+        self.__log(f"'altre disponibilità': {'clicked' if more else 'not found'}")
+        extended = self.__click_if_present(page, page.locator(_sel(_NEXT_AREA)))
+        self.__log(f"'estendi area' (nextArea): {'clicked' if extended else 'not found'}")
+        if extended:
+            dialog = self.__click_if_present(page, page.locator(_sel(_WARNING_CONFIRM)))
+            self.__log(f"warning dialog: {'confirmed' if dialog else 'none'}")
+
+    def __await_slot_cards(self, page) -> None:
+        """Wait for slot cards to render after the extend (they arrive via a partial-
+        response). 0 cards is a valid outcome, so a timeout here is NOT an error — the
+        container is read regardless."""
+        try:
+            page.wait_for_selector(f"{_sel(_SLOTS_CONTAINER)} {_SLOT_CARD}",
+                                   timeout=self.__action_ms)
+        except PlaywrightTimeoutError:
+            pass
+
+    def __card_count(self, page) -> int:
+        return page.locator(f"{_sel(_SLOTS_CONTAINER)} {_SLOT_CARD}").count()
 
     def __click_if_present(self, page, locator) -> bool:
         """Click the first match if it becomes visible within the short action window;
@@ -199,11 +230,11 @@ class LiveScraper:
         target.click()
         return True
 
-    def __settle(self, page) -> None:
+    def __settle(self, page, timeout_ms: int | None = None) -> None:
         """Let the ICEfaces partial-response finish. Best-effort: the app keeps a poll
-        channel open, so networkidle may not fire — the container is read regardless."""
+        channel open, so networkidle may not fire — the caller reads on regardless."""
         try:
-            page.wait_for_load_state("networkidle", timeout=self.__timeout_ms)
+            page.wait_for_load_state("networkidle", timeout=timeout_ms or self.__timeout_ms)
         except PlaywrightTimeoutError:
             pass
 
