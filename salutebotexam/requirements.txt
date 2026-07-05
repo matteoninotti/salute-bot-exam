@@ -1,0 +1,6 @@
+# salute-bot (versione esame) — dipendenze
+# Installa con:  pip install -r requirements.txt
+
+flask==3.0.*      # server CUP finto + interfaccia web del client
+requests==2.32.*  # il daemon (client) interroga il server CUP via HTTP
+fpdf2==2.8.*      # stampa PDF dei report degli slot

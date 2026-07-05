@@ -1,0 +1,56 @@
+{
+  "_nota": "Dati finti per il server CUP. 'nre_to_code' collega un NRE alla prestazione che sblocca. 'frames' e' la sequenza temporale di slot per ogni prestazione: il server avanza di un frame ad ogni richiesta /slots, cosi' col passare dei controlli compaiono nuovi posti (per mostrare il rilevamento).",
+
+  "prestazioni": {
+    "8901.20": "VISITA UROLOGICA DI CONTROLLO",
+    "8702.1": "ELETTROCARDIOGRAMMA"
+  },
+
+  "nre_to_code": {
+    "010A31234500001": "8901.20",
+    "020B45678900002": "8702.1"
+  },
+
+  "frames": {
+    "8901.20": [
+      [
+        {"date": "2026-07-20", "time": "09:00", "struttura": "OSPEDALE MOLINETTE", "cap": "10126", "address": "Corso Bramante 88, Torino"},
+        {"date": "2026-07-22", "time": "11:30", "struttura": "OSPEDALE MAURIZIANO", "cap": "10128", "address": "Largo Turati 62, Torino"},
+        {"date": "2026-07-24", "time": "15:00", "struttura": "OSPEDALE SAN GIOVANNI BOSCO", "cap": "10154", "address": "Piazza del Donatore di Sangue 3, Torino"}
+      ],
+      [
+        {"date": "2026-07-20", "time": "09:00", "struttura": "OSPEDALE MOLINETTE", "cap": "10126", "address": "Corso Bramante 88, Torino"},
+        {"date": "2026-07-22", "time": "11:30", "struttura": "OSPEDALE MAURIZIANO", "cap": "10128", "address": "Largo Turati 62, Torino"},
+        {"date": "2026-07-24", "time": "15:00", "struttura": "OSPEDALE SAN GIOVANNI BOSCO", "cap": "10154", "address": "Piazza del Donatore di Sangue 3, Torino"}
+      ],
+      [
+        {"date": "2026-07-18", "time": "08:30", "struttura": "OSPEDALE MOLINETTE", "cap": "10126", "address": "Corso Bramante 88, Torino"},
+        {"date": "2026-07-20", "time": "09:00", "struttura": "OSPEDALE MOLINETTE", "cap": "10126", "address": "Corso Bramante 88, Torino"},
+        {"date": "2026-07-22", "time": "11:30", "struttura": "OSPEDALE MAURIZIANO", "cap": "10128", "address": "Largo Turati 62, Torino"},
+        {"date": "2026-07-24", "time": "15:00", "struttura": "OSPEDALE SAN GIOVANNI BOSCO", "cap": "10154", "address": "Piazza del Donatore di Sangue 3, Torino"}
+      ],
+      [
+        {"date": "2026-07-16", "time": "10:15", "struttura": "OSPEDALE SAVIGLIANO", "cap": "12038", "address": "Via Ospedali 9, Savigliano"},
+        {"date": "2026-07-18", "time": "08:30", "struttura": "OSPEDALE MOLINETTE", "cap": "10126", "address": "Corso Bramante 88, Torino"},
+        {"date": "2026-07-20", "time": "09:00", "struttura": "OSPEDALE MOLINETTE", "cap": "10126", "address": "Corso Bramante 88, Torino"},
+        {"date": "2026-07-22", "time": "11:30", "struttura": "OSPEDALE MAURIZIANO", "cap": "10128", "address": "Largo Turati 62, Torino"},
+        {"date": "2026-07-24", "time": "15:00", "struttura": "OSPEDALE SAN GIOVANNI BOSCO", "cap": "10154", "address": "Piazza del Donatore di Sangue 3, Torino"}
+      ]
+    ],
+
+    "8702.1": [
+      [
+        {"date": "2026-07-15", "time": "14:00", "struttura": "OSPEDALE MAURIZIANO", "cap": "10128", "address": "Largo Turati 62, Torino"}
+      ],
+      [
+        {"date": "2026-07-15", "time": "14:00", "struttura": "OSPEDALE MAURIZIANO", "cap": "10128", "address": "Largo Turati 62, Torino"},
+        {"date": "2026-07-17", "time": "16:45", "struttura": "OSPEDALE SAN GIOVANNI BOSCO", "cap": "10154", "address": "Piazza del Donatore di Sangue 3, Torino"}
+      ],
+      [
+        {"date": "2026-07-15", "time": "14:00", "struttura": "OSPEDALE MAURIZIANO", "cap": "10128", "address": "Largo Turati 62, Torino"},
+        {"date": "2026-07-17", "time": "16:45", "struttura": "OSPEDALE SAN GIOVANNI BOSCO", "cap": "10154", "address": "Piazza del Donatore di Sangue 3, Torino"},
+        {"date": "2026-07-19", "time": "10:00", "struttura": "OSPEDALE MOLINETTE", "cap": "10126", "address": "Corso Bramante 88, Torino"}
+      ]
+    ]
+  }
+}
