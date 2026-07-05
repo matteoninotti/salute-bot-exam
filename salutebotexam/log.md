@@ -10,7 +10,7 @@ The app keeps the _shape_ of the real salute-bot — a watcher that polls a book
 
 There are **three runnable programs** plus a **shared SQLite file** they all read/write:
 
-1. **Mock CUP server** (`cup_server.py`, Flask, port 5000) — the _server_. It stands in for the real Piemonte CUP website. It reads canned data from `data/fixtures.json` and answers two HTTP requests: "what prestazione does this NRE unlock?" and "what slots are currently available for this prestazione?". Its trick is that the slot list **grows over time** (scripted frames), so the watcher can actually observe a _new slot appearing_.
+1. **Mock CUP server** (`cup_server.py`, Flask, port 5050) — the _server_. It stands in for the real Piemonte CUP website. It reads canned data from `data/fixtures.json` and answers two HTTP requests: "what prestazione does this NRE unlock?" and "what slots are currently available for this prestazione?". Its trick is that the slot list **grows over time** (scripted frames), so the watcher can actually observe a _new slot appearing_.
 
 2. **Daemon / watcher** (`daemon.py`) — the _client_ in the client/server pair, and the **only** program that ever talks to the CUP server. A background loop that, every few seconds: (a) resolves any pending _registration requests_ the clients have left in the DB — looks the NRE up on the CUP server, creates the user/subscription, and baselines the prestazione's current slots; then (b) asks the CUP server for the current slots of every watched prestazione and saves the newly-appeared ones. It talks to the server through `cup_client.py` (a thin `requests` wrapper) and to the DB through `store.py`.
 
@@ -28,7 +28,7 @@ Supporting modules shared by the above: `config.py` (paths/URLs/settings), `data
           ▼
    ┌───────────────┐   HTTP GET /slots?code=…    ┌──────────────┐
    │  CUP server   │◄────────────────────────────│    daemon    │
-   │ (Flask :5000) │────────────────────────────►│  (poll loop) │
+   │ (Flask :5050) │────────────────────────────►│  (poll loop) │
    └───────────────┘   [ current slots as JSON ] └──────┬───────┘
                                                         │ writes
                                                         ▼
