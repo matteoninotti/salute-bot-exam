@@ -207,6 +207,27 @@ class Store:
         )
         return _mark_new([dict(r) for r in rows])
 
+    def slots_signature(self, cf: str) -> str:
+        """A short token that changes only when a user gains a new slot.
+
+        It combines how many slots the user can see with the most recent
+        first_seen, so it changes when a new slot is saved but not on a plain
+        last_seen bump. The web client polls this to know when to refresh.
+
+        Args:
+            cf: the user's CF.
+        Returns:
+            A string like "<count>:<latest_first_seen>".
+        """
+        row = self.__row(
+            "SELECT COUNT(*) AS n, MAX(s.first_seen) AS latest "
+            "FROM targets t JOIN slots s ON s.code = t.code WHERE t.cf = ?",
+            (cf,),
+        )
+        count = row["n"] if row else 0
+        latest = (row["latest"] if row else None) or ""
+        return f"{count}:{latest}"
+
     # ----- richieste (registration queue + per-user history) -----
 
     def add_richiesta(self, cf: str, email: str | None, nre: str, now: str | None = None) -> int:

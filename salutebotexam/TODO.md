@@ -63,3 +63,4 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] Fix: slot growth anchored per-prestazione to its first fetch (registering late no longer misses new slots)
 - [x] `salutebotexam.py` — single-command launcher: starts cup_server + daemon + web in background (`start`/`stop`/`status`), logs to `logs/`
 - [x] Fixtures expanded to **17 slots per prestazione** (flat list + `baseline`); one new slot revealed every `FRAME_SECONDS`, so the demo grows for ~2 min
+- [x] Web dashboard **auto-refreshes when a new slot appears**: JS polls `/api/state/<cf>` (a slot-count + newest-first_seen signature) every 3s and reloads only when it changes (`store.slots_signature`)
