@@ -101,9 +101,10 @@ suo first_seen &egrave; il pi&ugrave; recente della prestazione <i>ed</i> &egrav
 diverso dal pi&ugrave; vecchio: cos&igrave; l'insieme iniziale (tutti con lo stesso
 istante) non viene evidenziato, mentre un posto comparso dopo s&igrave;.</li>
 <li><b>Crescita degli slot sull'orologio.</b> Il server CUP sceglie il "frame" di
-slot in base al tempo trascorso dal proprio avvio (frame = tempo // FRAME_SECONDS),
-non al numero di richieste: la crescita &egrave; quindi deterministica e
-indipendente dalla frequenza di controllo.</li>
+slot in base al tempo trascorso dal <i>primo controllo di quella prestazione</i>
+(frame = tempo // FRAME_SECONDS), non al numero di richieste: cos&igrave; il primo
+controllo restituisce sempre la situazione iniziale e i nuovi posti compaiono a
+distanza regolare, indipendentemente da quando l'utente si registra.</li>
 <li><b>Registrazione tramite il daemon.</b> Il client non contatta mai il server
 CUP: inserisce una richiesta "pending" nella tabella richieste e attende. Il
 daemon la prende in carico, risolve l'NRE sul server CUP, crea utente e iscrizione,

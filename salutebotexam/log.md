@@ -67,9 +67,9 @@ Supporting modules shared by the above: `config.py` (paths/URLs/settings), `data
 ## 3 — Mock CUP HTTP API
 
 - `GET /prestazione?nre=<nre>` → `{"code": "...", "descrizione": "..."}` (404 if the NRE is unknown). Does **not** advance the frame.
-- `GET /slots?code=<code>` → `{"code": "...", "slots": [ {date,time,struttura,cap,address}, ... ]}`. The frame returned is chosen by **wall-clock time since the server started**: `frame = min((now - server_start) // FRAME_SECONDS, last_frame)`. So the slot list grows on a fixed real-time schedule regardless of how often it is polled, and sticks on the last frame.
+- `GET /slots?code=<code>` → `{"code": "...", "slots": [ {date,time,struttura,cap,address}, ... ]}`. The frame is chosen by the time elapsed **since that code was first requested**: `frame = min((now - anchor[code]) // FRAME_SECONDS, last_frame)`. The anchor is set on the first `/slots` for the code (i.e. the daemon's baseline fetch at registration), so the **first fetch always returns the baseline** and a new slot appears ~`FRAME_SECONDS` after watching starts — no matter how long the server has been up.
 
-The only state the server keeps is its **start time** (in memory); restarting it restarts the growth from the baseline. For a clean demo: start the server, register a user right away (baseline = frame 0), then watch the new slot appear after `FRAME_SECONDS`.
+The only state the server keeps is a per-code anchor dict (in memory); restarting it restarts the growth from the baseline. For a clean demo: start the server, register a user, then watch the new slot appear after `FRAME_SECONDS`.
 
 ---
 
@@ -102,7 +102,7 @@ The only state the server keeps is its **start time** (in memory); restarting it
 2. **History semantics** → **B, a personal action-log.** One `richieste` row per user request-to-watch; history is per-user, not the shared check-log.
 3. **Baseline slots** → **baseline = already seen.** The daemon records current slots as seen at registration; when a new slot later appears, the whole list is reprinted with the new one highlighted.
 4. **What "new" means** → **(i) inferred from `first_seen`** — newest `first_seen` for the prestazione, and only when it differs from the oldest (so the baseline is never highlighted).
-5. **Frame growth model** → **wall-clock** (`(now - server_start) // FRAME_SECONDS`), not per poll. Start-time is in-memory; server restart resets growth.
+5. **Frame growth model** → **wall-clock, anchored per-code to the first request** (`(now - anchor[code]) // FRAME_SECONDS`), not per poll and not from server start — so the baseline is always the first frame and a new slot appears ~FRAME_SECONDS after watching starts, regardless of when the user registers. Anchors are in-memory; server restart resets growth. _(Revised after a bug: anchoring to server-start meant registering late could baseline an already-grown set, so no new slot ever appeared.)_
 6. **SQLite from multiple processes** → **accepted.** Each process opens its own short-lived connection; contention is negligible at exam scale (noted as a known limit).
 7. **Daemon with no users** → **idles** (nothing to poll); prints a quiet heartbeat line so the demo shows it is alive.
 8. **CLI vs web overlap** → **both fully featured** (register / list slots / history), each a complete client.

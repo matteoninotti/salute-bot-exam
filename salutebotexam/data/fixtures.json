@@ -1,5 +1,5 @@
 {
-  "_nota": "Dati finti per il server CUP. 'nre_to_code' collega un NRE alla prestazione che sblocca. 'frames' e' la sequenza temporale di slot per ogni prestazione: il server avanza di un frame ad ogni richiesta /slots, cosi' col passare dei controlli compaiono nuovi posti (per mostrare il rilevamento).",
+  "_nota": "Dati finti per il server CUP. 'nre_to_code' collega un NRE alla prestazione che sblocca. 'frames' e' la sequenza di slot per ogni prestazione: il primo frame e' la situazione iniziale (baseline), i successivi aggiungono un posto. Il server avanza di un frame ogni FRAME_SECONDS a partire dal primo controllo di quella prestazione, cosi' col passare del tempo compaiono nuovi posti (per mostrare il rilevamento).",
 
   "prestazioni": {
     "8901.20": "VISITA UROLOGICA DI CONTROLLO",
@@ -13,11 +13,6 @@
 
   "frames": {
     "8901.20": [
-      [
-        {"date": "2026-07-20", "time": "09:00", "struttura": "OSPEDALE MOLINETTE", "cap": "10126", "address": "Corso Bramante 88, Torino"},
-        {"date": "2026-07-22", "time": "11:30", "struttura": "OSPEDALE MAURIZIANO", "cap": "10128", "address": "Largo Turati 62, Torino"},
-        {"date": "2026-07-24", "time": "15:00", "struttura": "OSPEDALE SAN GIOVANNI BOSCO", "cap": "10154", "address": "Piazza del Donatore di Sangue 3, Torino"}
-      ],
       [
         {"date": "2026-07-20", "time": "09:00", "struttura": "OSPEDALE MOLINETTE", "cap": "10126", "address": "Corso Bramante 88, Torino"},
         {"date": "2026-07-22", "time": "11:30", "struttura": "OSPEDALE MAURIZIANO", "cap": "10128", "address": "Largo Turati 62, Torino"},

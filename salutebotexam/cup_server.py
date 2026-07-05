@@ -19,15 +19,17 @@ from config import CUP_HOST, CUP_PORT, FIXTURES_PATH, FRAME_SECONDS
 class CupData:
     """Holds the canned data and decides which slot frame is 'current'.
 
-    All state is private. The current frame is chosen from the wall clock:
-    frames advance every ``frame_seconds`` since the object was created, and the
-    last frame is sticky. ``clock`` is injectable so the logic is testable
-    without really waiting.
+    All state is private. A prestazione's frames advance every ``frame_seconds``
+    starting from the **first time that prestazione is requested** (not from
+    server start), so the growth begins when the daemon starts watching it -- the
+    first fetch always returns the baseline (frame 0) no matter how long the
+    server has been up. The last frame is sticky. ``clock`` is injectable so the
+    logic is testable without really waiting.
     """
 
     def __init__(self, fixtures_path: str, frame_seconds: float,
                  clock=time.time) -> None:
-        """Load the fixture data and record the start time.
+        """Load the fixture data.
 
         Args:
             fixtures_path: path to the JSON fixtures file.
@@ -42,7 +44,8 @@ class CupData:
         self.__frames = data["frames"]
         self.__frame_seconds = frame_seconds
         self.__clock = clock
-        self.__start = clock()
+        # Per-prestazione start time, set on that code's first /slots request.
+        self.__anchors: dict[str, float] = {}
 
     def resolve_nre(self, nre: str) -> dict | None:
         """Resolve an NRE to the prestazione it unlocks.
@@ -63,13 +66,16 @@ class CupData:
         Args:
             code: the prestazione code.
         Returns:
-            The list of slot dicts for the frame selected by elapsed wall-clock
-            time (last frame is sticky), or None if the code is unknown.
+            The list of slot dicts for the frame selected by the time elapsed
+            since this code was first requested (last frame is sticky), or None
+            if the code is unknown.
         """
         frames = self.__frames.get(code)
         if frames is None:
             return None
-        elapsed = self.__clock() - self.__start
+        if code not in self.__anchors:
+            self.__anchors[code] = self.__clock()  # start this code's clock now
+        elapsed = self.__clock() - self.__anchors[code]
         index = int(elapsed // self.__frame_seconds)
         if index > len(frames) - 1:
             index = len(frames) - 1
