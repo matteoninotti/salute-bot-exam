@@ -58,9 +58,10 @@ class CupData:
             A dict {code, descrizione}, or None if the NRE is unknown.
         """
         code = self.__nre_to_code.get(nre)
-        if code is None:
-            return None
-        return {"code": code, "descrizione": self.__prestazioni.get(code, code)}
+        result = None
+        if code is not None:
+            result = {"code": code, "descrizione": self.__prestazioni.get(code, code)}
+        return result
 
     def slots_for(self, code: str) -> list | None:
         """Return the slots currently visible for a prestazione.
@@ -73,15 +74,15 @@ class CupData:
             or None if the code is unknown.
         """
         all_slots = self.__slots.get(code)
-        if all_slots is None:
-            return None
-        if code not in self.__anchors:
-            self.__anchors[code] = self.__clock()  # start this code's clock now
-        elapsed = self.__clock() - self.__anchors[code]
-        visible = self.__baseline + int(elapsed // self.__frame_seconds)
-        if visible > len(all_slots):
-            visible = len(all_slots)
-        return all_slots[:visible]
+        current = None
+        if all_slots is not None:
+            if code not in self.__anchors:
+                self.__anchors[code] = self.__clock()  # start this code's clock now
+            elapsed = self.__clock() - self.__anchors[code]
+            visible = self.__baseline + int(elapsed // self.__frame_seconds)
+            visible = min(visible, len(all_slots))
+            current = all_slots[:visible]
+        return current
 
 
 app = Flask(__name__)
@@ -104,10 +105,12 @@ def prestazione():
         JSON {code, descrizione} with status 200, or {error} with status 404.
     """
     nre = request.args.get("nre", "")
-    result = cup.resolve_nre(nre)
-    if result is None:
-        return jsonify({"error": "NRE non riconosciuto"}), 404
-    return jsonify(result)
+    data = cup.resolve_nre(nre)
+    if data is None:
+        response = jsonify({"error": "NRE non riconosciuto"}), 404
+    else:
+        response = jsonify(data)
+    return response
 
 
 @app.get("/slots")
@@ -122,8 +125,10 @@ def slots():
     code = request.args.get("code", "")
     current = cup.slots_for(code)
     if current is None:
-        return jsonify({"error": "prestazione sconosciuta"}), 404
-    return jsonify({"code": code, "slots": current})
+        response = jsonify({"error": "prestazione sconosciuta"}), 404
+    else:
+        response = jsonify({"code": code, "slots": current})
+    return response
 
 
 def main() -> None:

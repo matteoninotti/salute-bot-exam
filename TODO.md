@@ -1,21 +1,6 @@
 # salute-bot (versione esame) — TODO
 
-Build tracker for the stripped-down exam version. Ordered by build sequence.
-Keep in sync at each step: check items off (`[x]`) as they land.
-
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done
-
-**Style reminder (all files):** **type hints on every function/method signature** + docstrings documenting params & return (NOTE 2 of the assignment grades this), 4-space indent, Italian UI text, heavy encapsulation (`__private` + getters) on every class unless explicitly justified, OOP paradigm, **exactly one `return` per function/method (no early returns)**. Target OS = **GNU/Linux** (no macOS-isms). Decisions live in `log.md` — re-read the relevant section before starting each task.
-
-> **Testing status:** there is currently **no test suite** — the earlier "Tested …" notes were removed as inaccurate. The real `unittest` suite is written in §10.6.
-
-## Exam requirements → where they are covered
-
-- **Client + server, CLI** → mock CUP server (`cup_server.py`) ↔ daemon (the only CUP client: `daemon.py`, `cup_client.py`); managed from `cli.py`
-- **GUI on the client only (web)** → `web.py` + `templates/`
-- **PDF printout of slot reports** → `report.py`
-- **Server-side DB (users, slots) + request history** → `database.py` + `store.py` (`richieste` table = per-user request history)
-- **No true client/server between CLI and daemon** → CLI/GUI/daemon just share the SQLite file
 
 ---
 
@@ -67,16 +52,22 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## 10 — Exam refactor (professor requirements)
 
-Scope of the current refactor pass. Everything below is `[ ]` todo unless marked
-done. Re-read the relevant `log.md` section before starting each item.
+**Execution — TDD, one subsection at a time on a `phase-10` branch (workflow in `log.md` §8):**
+for each subsection in order — (1) **write its `unittest` coverage first** (in
+`salutebotexam/tests/`, targeting the spec in `log.md`; it should fail), (2) implement
+until green, keeping the code **as simple and readable as possible**, (3) tick the boxes
+and sync this file, (4) **commit** (no push/merge without an explicit request). The
+behavioural areas (10.2 email removal, 10.3 slots, 10.4 types) are the directly testable
+ones; 10.1 is a style pass verified by keeping the behavioural tests green.
 
 ### 10.1 — Code style & architecture (all files)
-- [ ] **Single return** — exactly one `return` per function/method; no early returns anywhere
-- [ ] **CLI on raw `sys.argv`** — refactor `cli.py` off argparse to read `sys.argv` directly
-- [ ] **Strict encapsulation** — every attribute `__private` (name-mangling) by default; `_protected`/public only where explicitly required, justified case-by-case
-- [ ] **Internal helpers underscored** — every internal function/helper module gets a leading `_` (e.g. `_helper`); only the public API meant for external import stays unprefixed
-- [ ] **No** `from __future__ import annotations` in any file
-- [ ] **Simplicity** — avoid `while True` except the daemon background loop
+- [x] **Radical simplicity** — make ALL code much simpler: the most straightforward, readable implementation that just works; no cleverness or needless abstraction (readability first)
+- [x] **Single return** — exactly one `return` per function/method; no early returns anywhere
+- [x] **CLI on raw `sys.argv`** — refactor `cli.py` off argparse to read `sys.argv` directly
+- [x] **Strict encapsulation** — every attribute `__private` (name-mangling) by default; `_protected`/public only where explicitly required, justified case-by-case
+- [x] **Internal helpers underscored** — every internal function/helper module gets a leading `_` (e.g. `_helper`); only the public API meant for external import stays unprefixed
+- [x] **No** `from __future__ import annotations` in any file
+- [x] **Simplicity** — avoid `while True` except the daemon background loop
 
 ### 10.2 — Email removal (complete)
 - [ ] Remove the notification email field + all email logic **everywhere**: forms, `cli.py`, DB schema (`database.py`), `store.py`, `report.py`, `templates/`, and `documentazione.py`
@@ -89,7 +80,7 @@ done. Re-read the relevant `log.md` section before starting each item.
 - [ ] Generate **infinite** new slots "at clock time" only for services `8901.20` and `8702.1`
 - [ ] Exactly **one new slot per `SALUTEBOT_FRAME_SECONDS`**; on missed intervals, catch up together on the next request — one slot per missed interval
 - [ ] `Faker` with `it_IT` locale + a **fixed seed = 0** (repeatable demos); add `Faker` to `requirements.txt`
-- [ ] Fields generated: `date`, `time`, `facility`, `CAP`, `address`
+- [ ] Fields generated: `date`, `time`, `facility` (Faker-picked from a curated hospital pool), `CAP`, `address`
 - [ ] Appointment date range: random between **today** and **2027-12-31**
 - [ ] Show only **currently available** slots
 - [ ] Slots **expire 60s** after creation (auto-disappear), baseline included
@@ -108,8 +99,8 @@ done. Re-read the relevant `log.md` section before starting each item.
 - [x] Update `TODO.md` — this section (done first, before any other work)
 - [x] Correct the false "tested" claims and align the test path across `TODO.md`/`CLAUDE.md`/`log.md` (no suite exists yet; it lands in §10.6)
 
-### 10.6 — Testing & filesystem
-- [ ] Stdlib `unittest` suite in `salutebotexam/tests/` covering: Faker generation, slot expiry logic, email-removal compliance, route behavior
+### 10.6 — Verification & filesystem (final step)
+- [ ] All per-subsection `unittest` coverage green (written first for each area above, in `salutebotexam/tests/`: Faker generation, slot expiry, email-removal compliance, routes)
 - [ ] Re-run the manual end-to-end flow after the refactor (register CF+NRE → a new slot appears then expires at 60s → history → PDF)
 - [x] Remove stale `tests/__pycache__` (foreign `.pyc` artifacts from another project)
 - [ ] Read `assignment.md` and `ref_exercises/` for style matching — do **not** commit them

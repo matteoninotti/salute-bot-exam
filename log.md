@@ -1,6 +1,6 @@
 # salute-bot (versione esame) — design log
 
-Living design doc for the stripped-down exam version. Section 1 describes the architecture as currently imagined; the later sections record the schema, the API, and the open questions we still need to analyze together before finalizing the build.
+Living design doc for the stripped-down exam version — the single source of truth for architecture, schema, API and design decisions, kept up to date as they change. Section 1 describes the architecture; the later sections record the schema, the API, and the (now resolved) design decisions.
 
 ---
 
@@ -114,7 +114,7 @@ The state the server keeps is a per-code anchor + the live (unexpired) generated
 9. **Slot source** → **dynamic Faker generation** (`it_IT`, fixed seed), not `fixtures.json`. 3 baseline + one per `FRAME_SECONDS`, anchored per-code to the first fetch, with missed-interval catch-up (one slot each). Only the two services and the NRE map stay immutable.
 10. **Slot storage vs expiry** → **keep the DB `slots` table, add a 60s read filter.** Slots persist with `first_seen`/`last_seen`; the read filter hides any row older than 60s, so the "server-side DB (slots)" requirement and the `first_seen` "new" highlight both survive. _(Chosen over server-only in-memory or dropping persistence.)_
 11. **Baseline expiry** → **all slots expire uniformly**, baseline included — 60s after creation. The visible list is always the currently-available window; it can briefly hold fewer than 3 depending on `FRAME_SECONDS`.
-12. **Generation anchor** → **server start / first request, per-code** (resets on restart), matching the pre-existing frame model. The fixed Faker seed keeps a fresh run reproducible. _(Chosen over an absolute wall-clock epoch.)_
+12. **Generation anchor** → **per-code, set on that code's first `/slots` request** (resets on server restart), matching the pre-existing frame model (see #5 — not anchored to server start). The fixed Faker seed keeps a fresh run reproducible. _(Chosen over an absolute wall-clock epoch.)_
 13. **"New" highlight under expiry** → **keep the `first_seen` model** (newest `first_seen` for the prestazione, differing from the oldest). Preserved because slots still persist (see #10).
 14. **Email** → **removed entirely** from forms, CLI, schema, store, report, templates, README, this log, and the technical PDF. Existing demo DBs discarded; no migration.
 15. **CLI parsing** → **raw `sys.argv`** (argparse dropped). **Single return** per function/method enforced project-wide; no `from __future__ import annotations`; internal helpers underscored.
@@ -131,3 +131,12 @@ _This section stays as a record; new questions get appended here as they come up
 - **Self-contained compressed project** (a zip that runs on its own).
 - **Code quality is graded (NOTE 2):** comments, DocStrings, **documented input/output parameter types** of functions/methods, well-structured code, **OOP**. → We use type hints on every signature + docstrings that state params and return, and heavy encapsulation throughout.
 - **Oral exam:** the project is presented and defended, so the code is kept at a level the student can fully explain (matches his course style).
+- **Tests:** no suite exists yet; it is written during the refactor with the standard-library `unittest` framework in `salutebotexam/tests/` (temporary DBs; injected clocks, clients, and I/O).
+
+---
+
+## 8 — Build workflow (this refactor)
+
+- **TDD, one `§10` subsection at a time.** For each subsection: write its `unittest` coverage first (red), implement to green while keeping the code as simple and readable as possible, sync `TODO.md`, then commit.
+- **GitHub flow.** The refactor lives on a `phase-10` branch. Commit each advanced/completed subsection with green tests and synchronized TODO status; merge with `git merge --no-ff`, keeping `main` releasable. Project-meta changes may go straight to `main`.
+- **Merge, push, and delete branches only when Matteo explicitly requests them.**

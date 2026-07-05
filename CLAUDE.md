@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The application lives in `salutebotexam/`. `cup_server.py` provides the mock CUP API (slots generated dynamically with `Faker`, `it_IT` locale, fixed seed — no `data/fixtures.json`), `daemon.py` polls it, `store.py`/`database.py` manage SQLite, and `cli.py`/`web.py` are clients. Templates and CSS live in `templates/` and `static/`. The only immutable server data are the two services (`8901.20`, `8702.1`) and the NRE→code map. Root documents contain requirements, decisions, tracked work, and usage. `ref_exercises/` defines the expected course-level style.
+The application lives in `salutebotexam/`. `cup_server.py` is the mock CUP API (the server), `daemon.py` polls it, `store.py`/`database.py` manage SQLite, and `cli.py`/`web.py` are the clients; `templates/` and `static/` hold the web assets. Root documents are `README.md` (usage), `log.md` (architecture, schema, API, design decisions), and `TODO.md` (tracked work). `ref_exercises/` defines the expected course-level style. **The architecture and every spec that can change during the project live in `log.md`, not here — read it there.**
 
 ## Build, Test, and Development Commands
 
@@ -15,7 +15,7 @@ pip install -r requirements.txt
 python salutebotexam.py
 python salutebotexam.py status
 python salutebotexam.py stop
-python -m unittest discover -s tests -p "test_*.py"
+python -m unittest discover -s tests -t . -p "test_*.py"
 python -m compileall .
 ```
 
@@ -29,16 +29,14 @@ Encapsulation is a professor requirement. Every attribute is private (`__attr`) 
 
 ## Testing Guidelines
 
-Use standard-library `unittest`; files go in `salutebotexam/tests/` as `test_*.py`. Isolate SQLite with temporary databases and inject clocks, clients, and I/O. Test the 3 baseline slots, Faker generation (`it_IT`, seeded), clock-driven growth, the 60-second slot expiry, email-removal compliance, detection, registration, routes, and PDF output.
+Use standard-library `unittest`; files go in `salutebotexam/tests/` as `test_*.py`. Isolate SQLite with temporary databases and inject clocks, clients, and I/O. Cover the slot generator and expiry, detection, registration, routes, and PDF output — the exact spec (baseline count, seed, expiry window) lives in `log.md`.
 
-## Decisions, Tracker, and Git Workflow
+## Decisions, Tracker & Commits
 
-**`log.md` is the single source of design truth and must never be stale** — update it the moment a design decision, schema, or API changes, in the same change that makes the change. **Re-read the relevant `log.md` sections at the start of every new `TODO.md` task** (grep by topic or `D#`); never rely on memory. Keep `AGENTS.md` current when rules change. Synchronize `TODO.md` in every commit that advances a tracked task.
+**`log.md` is the single source of design truth and must never be stale** — update it the moment a design decision, schema, or API changes, in the same change that makes the change. **Re-read the relevant `log.md` sections at the start of every new `TODO.md` task** (grep by topic); never rely on memory. - claude.md holds the immutable info and guidelines. log.md holds architectural and specs choices that can change throughout the process (and must be kept up to date) - **Keep `TODO.md` in sync at commit time.** Whenever a commit completes or advances a tracked task, check it off (`[x]`) / update its status in `TODO.md` **in that same commit** — the tracker must never lag the code.
 
-Use GitHub flow: one `phase-N` branch per TODO phase. Commit each completed/advanced task only with green tests and synchronized TODO status. Merge completed phases with `git merge --no-ff`; `main` stays releasable. Project-meta changes (`AGENTS.md`, guardrails, docs) go directly to `main`. Merge, push, and delete branches only when Matteo explicitly requests them.
-
-Use concise imperative commits, such as `Add deterministic slot generator`. Pull requests explain changes and verification; include screenshots for UI work. Do not commit `.venv/`, databases, reports, logs, PID files, or `__pycache__/`.
+Use concise imperative commits, such as `Add deterministic slot generator`. Pull requests explain changes and verification; include screenshots for UI work. Do not commit `.venv/`, databases, reports, logs, PID files, or `__pycache__/`. **The build workflow (branching, TDD order, merge policy) lives in `log.md` §8.**
 
 ## Configuration & Safety
 
-Use documented `SALUTEBOT_*` environment variables. There is **no email field anywhere** and **no authentication** — access is CF-only. Surface the exact notice `local demonstration only; CF-only access, no authentication` in `README.md` (*Demo limitations and security*), the technical doc (*Analisi tecnica*), and the web login page. Treat CF and NRE as sensitive even though this local exam demo stores them unencrypted.
+Use documented `SALUTEBOT_*` environment variables. CF and NRE are stored unencrypted (local exam demo) — treat them as sensitive. The security posture (CF-only access, no authentication, no email) and the exact demo-disclaimer text are specified in `log.md`.

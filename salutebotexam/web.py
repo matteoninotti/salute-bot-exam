@@ -29,9 +29,11 @@ def index():
 def login():
     """Validate the CF and go to that user's dashboard."""
     cf = request.form.get("cf", "").strip().upper()
-    if not valid_cf(cf):
-        return render_template("index.html", error="Formato CF non valido (16 caratteri).")
-    return redirect(url_for("dashboard", cf=cf))
+    if valid_cf(cf):
+        response = redirect(url_for("dashboard", cf=cf))
+    else:
+        response = render_template("index.html", error="Formato CF non valido (16 caratteri).")
+    return response
 
 
 @app.get("/register")
@@ -54,13 +56,16 @@ def register():
     if not valid_nre(nre):
         errors.append("NRE non valido.")
     if errors:
-        return render_template("register.html", error=" ".join(errors), cf=cf, email=email)
-    with Store() as store:
-        if store.user_exists(cf):
-            return render_template("register.html",
-                                   error="Sei gia' registrato. Accedi dalla home.")
-        rich_id = store.add_richiesta(cf, email, nre)
-    return redirect(url_for("richiesta", rich_id=rich_id))
+        response = render_template("register.html", error=" ".join(errors), cf=cf, email=email)
+    else:
+        with Store() as store:
+            if store.user_exists(cf):
+                response = render_template("register.html",
+                                           error="Sei gia' registrato. Accedi dalla home.")
+            else:
+                rich_id = store.add_richiesta(cf, email, nre)
+                response = redirect(url_for("richiesta", rich_id=rich_id))
+    return response
 
 
 @app.get("/richiesta/<int:rich_id>")
@@ -78,19 +83,23 @@ def dashboard(cf: str):
     """Show a user's followed prestazioni and their current slots."""
     cf = cf.strip().upper()
     with Store() as store:
-        if not store.user_exists(cf):
-            return render_template("index.html",
+        known = store.user_exists(cf)
+        if known:
+            email = store.get_email(cf)
+            targets = store.get_user_targets(cf)
+            rows = store.slots_for_user(cf)
+            signature = store.slots_signature(cf)  # for the auto-refresh script
+    if not known:
+        response = render_template("index.html",
                                    error="Nessun utente con questo CF. Registrati.")
-        email = store.get_email(cf)
-        targets = store.get_user_targets(cf)
-        rows = store.slots_for_user(cf)
-        signature = store.slots_signature(cf)  # for the auto-refresh script
-    slots_by_code: dict[str, list] = {}
-    for row in rows:
-        slots_by_code.setdefault(row["code"], []).append(row)
-    return render_template("dashboard.html", cf=cf, email=email,
-                           targets=targets, slots_by_code=slots_by_code,
-                           signature=signature)
+    else:
+        slots_by_code: dict[str, list] = {}
+        for row in rows:
+            slots_by_code.setdefault(row["code"], []).append(row)
+        response = render_template("dashboard.html", cf=cf, email=email,
+                                   targets=targets, slots_by_code=slots_by_code,
+                                   signature=signature)
+    return response
 
 
 @app.get("/api/state/<cf>")
@@ -117,12 +126,15 @@ def add(cf: str):
     cf = cf.strip().upper()
     nre = request.form.get("nre", "").strip().upper()
     if not valid_nre(nre):
-        return render_template("add.html", cf=cf, error="NRE non valido.")
-    with Store() as store:
-        if not store.user_exists(cf):
-            return render_template("index.html", error="Nessun utente con questo CF.")
-        rich_id = store.add_richiesta(cf, None, nre)
-    return redirect(url_for("richiesta", rich_id=rich_id))
+        response = render_template("add.html", cf=cf, error="NRE non valido.")
+    else:
+        with Store() as store:
+            if not store.user_exists(cf):
+                response = render_template("index.html", error="Nessun utente con questo CF.")
+            else:
+                rich_id = store.add_richiesta(cf, None, nre)
+                response = redirect(url_for("richiesta", rich_id=rich_id))
+    return response
 
 
 @app.get("/history/<cf>")
