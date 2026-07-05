@@ -17,14 +17,15 @@ from config import CUP_HOST, CUP_PORT, FIXTURES_PATH, FRAME_SECONDS
 
 
 class CupData:
-    """Holds the canned data and decides which slot frame is 'current'.
+    """Holds the canned data and decides how many slots are 'currently' visible.
 
-    All state is private. A prestazione's frames advance every ``frame_seconds``
-    starting from the **first time that prestazione is requested** (not from
-    server start), so the growth begins when the daemon starts watching it -- the
-    first fetch always returns the baseline (frame 0) no matter how long the
-    server has been up. The last frame is sticky. ``clock`` is injectable so the
-    logic is testable without really waiting.
+    Each prestazione has a full ordered slot list; ``baseline`` of them are
+    visible at once, and one more becomes visible every ``frame_seconds``,
+    counted from the **first time that prestazione is requested** (not from server
+    start). So the first fetch always returns the baseline no matter how long the
+    server has been up, then the list grows one slot at a time until all are
+    shown. ``clock`` is injectable so the logic is testable without really
+    waiting.
     """
 
     def __init__(self, fixtures_path: str, frame_seconds: float,
@@ -33,7 +34,7 @@ class CupData:
 
         Args:
             fixtures_path: path to the JSON fixtures file.
-            frame_seconds: how long each slot frame lasts before advancing.
+            frame_seconds: seconds between one slot becoming visible and the next.
             clock: a callable returning the current time in seconds (injectable
                 for tests).
         """
@@ -41,7 +42,8 @@ class CupData:
             data = json.load(f)
         self.__prestazioni = data["prestazioni"]
         self.__nre_to_code = data["nre_to_code"]
-        self.__frames = data["frames"]
+        self.__slots = data["slots"]
+        self.__baseline = data["baseline"]
         self.__frame_seconds = frame_seconds
         self.__clock = clock
         # Per-prestazione start time, set on that code's first /slots request.
@@ -61,25 +63,25 @@ class CupData:
         return {"code": code, "descrizione": self.__prestazioni.get(code, code)}
 
     def slots_for(self, code: str) -> list | None:
-        """Return the current frame of slots for a prestazione.
+        """Return the slots currently visible for a prestazione.
 
         Args:
             code: the prestazione code.
         Returns:
-            The list of slot dicts for the frame selected by the time elapsed
-            since this code was first requested (last frame is sticky), or None
-            if the code is unknown.
+            The first ``baseline + elapsed // frame_seconds`` slots (capped at the
+            full list), where elapsed is measured from this code's first request,
+            or None if the code is unknown.
         """
-        frames = self.__frames.get(code)
-        if frames is None:
+        all_slots = self.__slots.get(code)
+        if all_slots is None:
             return None
         if code not in self.__anchors:
             self.__anchors[code] = self.__clock()  # start this code's clock now
         elapsed = self.__clock() - self.__anchors[code]
-        index = int(elapsed // self.__frame_seconds)
-        if index > len(frames) - 1:
-            index = len(frames) - 1
-        return frames[index]
+        visible = self.__baseline + int(elapsed // self.__frame_seconds)
+        if visible > len(all_slots):
+            visible = len(all_slots)
+        return all_slots[:visible]
 
 
 app = Flask(__name__)

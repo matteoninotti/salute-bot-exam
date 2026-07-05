@@ -41,9 +41,22 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Avvio (tre terminali)
+## Avvio rapido (un comando)
 
-Con l'ambiente virtuale attivo in ognuno:
+Per avviare server CUP, daemon e client web insieme, in background:
+
+```bash
+python salutebotexam.py            # avvia tutto (log in logs/)
+python salutebotexam.py status     # mostra lo stato dei processi
+python salutebotexam.py stop       # ferma tutto
+```
+
+Poi apri l'interfaccia web su http://127.0.0.1:5001, oppure usa il client a riga
+di comando (`python cli.py register`, `slots`, `history`) in un altro terminale.
+
+## Avvio manuale (tre terminali)
+
+In alternativa, per vedere i log a schermo, con l'ambiente virtuale attivo in ognuno:
 
 **Terminale 1 — server CUP finto:**
 ```bash
@@ -99,6 +112,7 @@ export SALUTEBOT_FRAME_SECONDS=3 SALUTEBOT_POLL_INTERVAL=1
 
 ```
 salutebotexam/
+├── salutebotexam.py   avvio unico: server + daemon + web in background
 ├── config.py          impostazioni condivise (percorsi, porte, intervalli)
 ├── database.py        connessione SQLite + schema
 ├── models.py          classi Slot e Prestazione

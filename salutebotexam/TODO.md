@@ -58,3 +58,8 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] **Technical documentation PDF** (required deliverable): `documentazione.py` → `documentazione.pdf` (Oggetto, Scopo, Analisi tecnica, commenti procedure, guida I/O, Conclusioni). 3 pages.
 - [x] **Self-contained zip** of the project (excludes `.venv`, `__pycache__`, `*.db`, `report/`, dev docs)
 - [x] Manual end-to-end run: register (daemon resolves), new slot appears after FRAME_SECONDS (`>> NUOVO`), history, PDF — all as real processes over HTTP + sqlite
+
+## Post-build enhancements
+- [x] Fix: slot growth anchored per-prestazione to its first fetch (registering late no longer misses new slots)
+- [x] `salutebotexam.py` — single-command launcher: starts cup_server + daemon + web in background (`start`/`stop`/`status`), logs to `logs/`
+- [x] Fixtures expanded to **17 slots per prestazione** (flat list + `baseline`); one new slot revealed every `FRAME_SECONDS`, so the demo grows for ~2 min

@@ -67,9 +67,9 @@ Supporting modules shared by the above: `config.py` (paths/URLs/settings), `data
 ## 3 — Mock CUP HTTP API
 
 - `GET /prestazione?nre=<nre>` → `{"code": "...", "descrizione": "..."}` (404 if the NRE is unknown). Does **not** advance the frame.
-- `GET /slots?code=<code>` → `{"code": "...", "slots": [ {date,time,struttura,cap,address}, ... ]}`. The frame is chosen by the time elapsed **since that code was first requested**: `frame = min((now - anchor[code]) // FRAME_SECONDS, last_frame)`. The anchor is set on the first `/slots` for the code (i.e. the daemon's baseline fetch at registration), so the **first fetch always returns the baseline** and a new slot appears ~`FRAME_SECONDS` after watching starts — no matter how long the server has been up.
+- `GET /slots?code=<code>` → `{"code": "...", "slots": [ {date,time,struttura,cap,address}, ... ]}`. Each prestazione has a full ordered slot list (17 each); the server returns the first `baseline + (now - anchor[code]) // FRAME_SECONDS` of them (capped at the full list). The anchor is set on the first `/slots` for the code (the daemon's baseline fetch at registration), so the **first fetch always returns the baseline** and one more slot appears every `FRAME_SECONDS` after watching starts — no matter how long the server has been up.
 
-The only state the server keeps is a per-code anchor dict (in memory); restarting it restarts the growth from the baseline. For a clean demo: start the server, register a user, then watch the new slot appear after `FRAME_SECONDS`.
+The only state the server keeps is a per-code anchor dict (in memory); restarting it restarts the growth from the baseline. For a clean demo: start the server, register a user, then watch a new slot appear every `FRAME_SECONDS`.
 
 ---
 
