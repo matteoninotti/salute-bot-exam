@@ -16,25 +16,11 @@ import sys
 import time
 
 from store import Store
+from validation import valid_cf, valid_email, valid_nre
 
 # How long the CLI waits for the daemon to resolve a staged request.
 _POLL_TRIES = 30
 _POLL_WAIT = 1.0
-
-
-def _valid_cf(cf: str) -> bool:
-    """Return True if cf looks like a codice fiscale (16 alphanumeric chars)."""
-    return len(cf) == 16 and cf.isalnum()
-
-
-def _valid_nre(nre: str) -> bool:
-    """Return True if nre looks like an NRE (15 alphanumeric chars)."""
-    return len(nre) == 15 and nre.isalnum()
-
-
-def _valid_email(email: str) -> bool:
-    """Return True if email has a single @ and a dotted domain."""
-    return email.count("@") == 1 and "." in email.split("@")[1]
 
 
 class CLI:
@@ -65,7 +51,7 @@ class CLI:
             self.__write("Sei gia' registrato. Usa 'add' per seguire un'altra prestazione.")
             return
         email = self.__read("Email per le notifiche: ").strip()
-        if not _valid_email(email):
+        if not valid_email(email):
             self.__write("Email non valida. Nulla e' stato salvato.")
             return
         nre = self.__ask_nre()
@@ -154,7 +140,7 @@ class CLI:
     def __ask_cf(self) -> str | None:
         """Prompt for a CF and validate it; return the normalised CF or None."""
         cf = self.__read("Codice Fiscale: ").strip().upper()
-        if not _valid_cf(cf):
+        if not valid_cf(cf):
             self.__write("Formato CF non valido (attesi 16 caratteri alfanumerici).")
             return None
         return cf
@@ -162,7 +148,7 @@ class CLI:
     def __ask_nre(self) -> str | None:
         """Prompt for an NRE and validate it; return the normalised NRE or None."""
         nre = self.__read("NRE (numero ricetta, 15 caratteri): ").strip().upper()
-        if not _valid_nre(nre):
+        if not valid_nre(nre):
             self.__write("Formato NRE non valido (attesi 15 caratteri alfanumerici).")
             return None
         return nre
@@ -180,7 +166,7 @@ class CLI:
             cf = self.__read("Codice Fiscale: ").strip().upper()
         else:
             cf = cf.strip().upper()
-        if not _valid_cf(cf):
+        if not valid_cf(cf):
             self.__write("Formato CF non valido.")
             return None
         if require_user and not self.__store.user_exists(cf):

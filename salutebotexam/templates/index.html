@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Accedi</h2>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="post" action="{{ url_for('login') }}">
+  <label>Codice Fiscale
+    <input name="cf" maxlength="16" placeholder="RSSMRA85T10A562S" required>
+  </label>
+  <button type="submit">Entra</button>
+</form>
+<p>Non sei registrato? <a href="{{ url_for('register_form') }}">Registrati</a></p>
+{% endblock %}

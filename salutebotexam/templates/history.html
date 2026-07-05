@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Cronologia richieste</h2>
+<p class="muted">Utente: {{ cf }}</p>
+{% if not rows %}
+  <p>Nessuna richiesta nella cronologia.</p>
+{% else %}
+  <table>
+    <thead>
+      <tr><th>Data</th><th>Esito</th><th>Prestazione</th><th>NRE</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>{{ r.requested_at[:19] }}</td>
+          <td>{{ {'ok': 'ok', 'invalid': 'NRE non valido', 'pending': 'in attesa'}.get(r.status, r.status) }}</td>
+          <td>{% if r.code %}{{ r.descrizione }} ({{ r.code }}){% else %}&mdash;{% endif %}</td>
+          <td>{{ r.nre }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+<p><a href="{{ url_for('dashboard', cf=cf) }}">Torna alla dashboard</a></p>
+{% endblock %}
