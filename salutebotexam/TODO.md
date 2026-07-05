@@ -30,7 +30,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] `store.py` — `Store` class: users, prestazioni, targets; slots (save / known-keys / touch / read with `is_new` inferred from newest `first_seen`); `richieste` (insert pending, read a user's history); daemon-side resolve helpers (create user+target, baseline slots). Tested full lifecycle + is_new rule.
 
 ## 4 — Server half (mock CUP)
-- [ ] `cup_server.py` — Flask HTTP server: `/prestazione?nre=` (resolve NRE, no advance) + `/slots?code=` (frame chosen by wall-clock since startup, `FRAME_SECONDS`)
+- [x] `cup_server.py` — Flask HTTP server (port 5050; 5000 is taken by macOS AirPlay): `/prestazione?nre=` (resolve NRE) + `/slots?code=` (frame by wall-clock, `FRAME_SECONDS`). Tested frame math (fake clock), routes (test client), and a real curl smoke.
 
 ## 5 — Client half (watcher)
 - [ ] `cup_client.py` — `CupClient`: `requests.get` wrapper → `Prestazione` / list of `Slot`

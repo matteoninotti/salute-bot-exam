@@ -13,9 +13,11 @@ DB_PATH = str(BASE_DIR / "salutebot.db")
 FIXTURES_PATH = str(BASE_DIR / "data" / "fixtures.json")
 REPORT_DIR = str(BASE_DIR / "report")
 
-# Mock CUP server (the "server" half: serves the slots over HTTP)
+# Mock CUP server (the "server" half: serves the slots over HTTP).
+# Port 5050, not 5000: on macOS port 5000 is taken by ControlCenter (AirPlay
+# Receiver), which would answer requests instead of our server.
 CUP_HOST = "127.0.0.1"
-CUP_PORT = 5000
+CUP_PORT = 5050
 CUP_URL = f"http://{CUP_HOST}:{CUP_PORT}"
 
 # How many seconds each scripted slot "frame" lasts before the CUP server moves
