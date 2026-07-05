@@ -102,8 +102,8 @@ request). §10.6 = fill any gaps + full green.
 - [x] Correct the false "tested" claims and align the test path across `TODO.md`/`CLAUDE.md`/`log.md` (no suite exists yet; it lands in §10.6)
 
 ### 10.6 — Verification & filesystem (final step)
-- [ ] All per-subsection `unittest` coverage green (written first for each area above, in `salutebotexam/tests/`: Faker generation, slot expiry, email-removal compliance, routes)
-- [ ] Re-run the manual end-to-end flow after the refactor (register CF+NRE → a new slot appears then expires at 60s → history → PDF)
+- [x] All per-subsection `unittest` coverage green (`salutebotexam/tests/`: models, validation, store + expiry, detector, cup_server generation/growth/expiry, daemon resolve, cli flows) — 34 tests
+- [x] Re-run the manual end-to-end flow after the refactor (register CF+NRE → a new slot appears → PDF → history; 60s expiry covered by unit tests)
 - [x] Remove stale `tests/__pycache__` (foreign `.pyc` artifacts from another project)
-- [ ] Read `assignment.md` and `ref_exercises/` for style matching — do **not** commit them
-- [ ] Do **not** regenerate or commit `documentazione.pdf`
+- [x] Read `assignment.md` and `ref_exercises/` for style matching — do **not** commit them (read; left as-is)
+- [x] Do **not** regenerate or commit `documentazione.pdf` (untouched)
