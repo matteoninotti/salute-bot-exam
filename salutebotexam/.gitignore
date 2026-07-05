@@ -1,12 +1,7 @@
-# Virtual environment
+# Virtual environment — lives here (requirements.txt is in this same folder).
+# __pycache__/*.pyc/*.db are already covered by the root .gitignore; kept out of
+# this file to avoid duplicating rules across the two.
 .venv/
-
-# Python cache
-__pycache__/
-*.pyc
-
-# SQLite database (created at runtime)
-*.db
 
 # Background-launcher logs and PID file
 logs/

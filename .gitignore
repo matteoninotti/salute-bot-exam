@@ -223,7 +223,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # ──────────────────────────────────────────────────────────────────────────
-# Project-specific (salute-bot) — macOS dev, Playwright, SQLite, secrets
+# Project-specific (salute-bot-exam) — macOS dev, SQLite, generated deliverable
 # ──────────────────────────────────────────────────────────────────────────
 
 # macOS (dev machine is Apple Silicon)
@@ -236,15 +236,7 @@ __marimo__/
 .Trashes
 Icon?
 
-# Playwright (browsers cache, traces, test artifacts)
-playwright-report/
-test-results/
-playwright/.cache/
-*.webm
-trace.zip
-
-# SQLite store — runtime DB holds encrypted CF/NRE + state; never commit it.
-# (Schema/seed live in .sql files, which stay tracked.)
+# SQLite database (created at runtime; never commit it)
 *.db
 *.db-journal
 *.db-wal
@@ -253,19 +245,12 @@ trace.zip
 *.sqlite3
 *.sqlite3-journal
 
-# Secrets / local config beyond .env (CF, NRE, SES/Twilio creds — never in git)
-secrets/
-*.secret
-*.pem
-*.key
-
 # Claude Code — local-only settings (shared settings.json may be committed)
 .claude/settings.local.json
 
-# Throwaway feasibility spike (to be discarded per project log, never committed)
-_spike_throwaway/
+# Technical documentation PDF at the repo root — regenerate with:
+#   python salutebotexam/documentazione.py
+documentazione.pdf
 
-# Recon captures that carry the real CF/NRE — NEVER commit. Only the redacted
-# fixtures (recon/*_redacted.*) are tracked; the raw HAR + notes stay local.
-recon/flow.har
-recon/recon.txt
+# Submission zip, built on demand from the final repo state
+salutebotexam.zip
