@@ -100,11 +100,11 @@ il campo last_seen, quelli nuovi vengono inseriti con first_seen = adesso.</li>
 suo first_seen &egrave; il pi&ugrave; recente della prestazione <i>ed</i> &egrave;
 diverso dal pi&ugrave; vecchio: cos&igrave; l'insieme iniziale (tutti con lo stesso
 istante) non viene evidenziato, mentre un posto comparso dopo s&igrave;.</li>
-<li><b>Crescita degli slot sull'orologio.</b> Il server CUP sceglie il "frame" di
-slot in base al tempo trascorso dal <i>primo controllo di quella prestazione</i>
-(frame = tempo // FRAME_SECONDS), non al numero di richieste: cos&igrave; il primo
-controllo restituisce sempre la situazione iniziale e i nuovi posti compaiono a
-distanza regolare, indipendentemente da quando l'utente si registra.</li>
+<li><b>Crescita degli slot sull'orologio.</b> Ogni prestazione ha una lista di 17
+posti; il server ne mostra un numero crescente (baseline + tempo // FRAME_SECONDS),
+contato dal <i>primo controllo di quella prestazione</i>. Cos&igrave; il primo
+controllo restituisce sempre la situazione iniziale e un nuovo posto compare a
+intervalli regolari, indipendentemente da quando l'utente si registra.</li>
 <li><b>Registrazione tramite il daemon.</b> Il client non contatta mai il server
 CUP: inserisce una richiesta "pending" nella tabella richieste e attende. Il
 daemon la prende in carico, risolve l'NRE sul server CUP, crea utente e iscrizione,
@@ -132,7 +132,9 @@ CupClient, Daemon, SlotReport, CLI) tengono gli attributi privati (name mangling
 <p><b>Installazione:</b> creare un ambiente virtuale e installare le dipendenze:
 <code>python3 -m venv .venv</code>, <code>source .venv/bin/activate</code>,
 <code>pip install -r requirements.txt</code>.</p>
-<p><b>Avvio</b> (tre terminali): 1) <code>python cup_server.py</code>;
+<p><b>Avvio rapido:</b> <code>python salutebotexam.py</code> lancia insieme, in
+background, server CUP + daemon + web (<code>stop</code>/<code>status</code> per
+gestirli). In alternativa, tre terminali separati: 1) <code>python cup_server.py</code>;
 2) <code>python daemon.py</code>; 3) il client, a scelta:
 <code>python cli.py register</code> oppure <code>python web.py</code>
 (poi aprire http://127.0.0.1:5001).</p>
