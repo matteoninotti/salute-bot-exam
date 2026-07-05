@@ -13,10 +13,12 @@ Run:  python cup_server.py
 """
 
 import time
+from collections.abc import Callable
 from datetime import date
 
 from faker import Faker
 from flask import Flask, jsonify, request
+from flask.typing import ResponseReturnValue
 
 from config import CUP_HOST, CUP_PORT, FRAME_SECONDS
 
@@ -55,7 +57,7 @@ class CupData:
     and expiry can be tested without really waiting.
     """
 
-    def __init__(self, frame_seconds: float, clock=time.time) -> None:
+    def __init__(self, frame_seconds: float, clock: Callable[[], float] = time.time) -> None:
         """Build the generator.
 
         Args:
@@ -149,7 +151,7 @@ def home() -> str:
 
 
 @app.get("/prestazione")
-def prestazione():
+def prestazione() -> ResponseReturnValue:
     """Resolve an NRE to the prestazione it unlocks (used during registration).
 
     Query params:
@@ -167,7 +169,7 @@ def prestazione():
 
 
 @app.get("/slots")
-def slots():
+def slots() -> ResponseReturnValue:
     """Return the current slots for a prestazione (the daemon polls this).
 
     Query params:

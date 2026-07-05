@@ -90,9 +90,9 @@ request). §10.6 = fill any gaps + full green.
 - [x] **Remove `data/fixtures.json`** — generate all slots dynamically in Python; the only immutable data are the two services and the NRE map: `{"010A31234500001": "8901.20", "020B45678900002": "8702.1"}`
 
 ### 10.4 — Type coverage fixes
-- [ ] Add return annotations to all Flask routes (`web.py`, `cup_server.py`)
-- [ ] Add parameter types to injected CLI/clock callables
-- [ ] Keep annotations clean/simple — avoid complex `Callable`/`Union` unless necessary
+- [x] Add return annotations to all Flask routes (`web.py`, `cup_server.py`)
+- [x] Add parameter types to injected CLI/clock callables
+- [x] Keep annotations clean/simple — avoid complex `Callable`/`Union` unless necessary
 
 ### 10.5 — Documentation & notices
 - [ ] Add the exact disclaimer `local demonstration only; CF-only access, no authentication` to: `README.md` (*Demo limitations and security*), technical doc (*Analisi tecnica*), and the web login page (short, clearly visible UI notice)

@@ -10,6 +10,7 @@ work lives in the Store / SlotReport classes they call.
 """
 
 from flask import Flask, abort, redirect, render_template, request, send_file, url_for
+from flask.typing import ResponseReturnValue
 
 from config import WEB_PORT
 from report import SlotReport
@@ -20,13 +21,13 @@ app = Flask(__name__)
 
 
 @app.get("/")
-def index():
+def index() -> str:
     """The login page (enter a CF)."""
     return render_template("index.html")
 
 
 @app.post("/login")
-def login():
+def login() -> ResponseReturnValue:
     """Validate the CF and go to that user's dashboard."""
     cf = request.form.get("cf", "").strip().upper()
     if valid_cf(cf):
@@ -37,13 +38,13 @@ def login():
 
 
 @app.get("/register")
-def register_form():
+def register_form() -> str:
     """The registration form."""
     return render_template("register.html")
 
 
 @app.post("/register")
-def register():
+def register() -> ResponseReturnValue:
     """Validate the form and stage a registration request for the daemon."""
     cf = request.form.get("cf", "").strip().upper()
     nre = request.form.get("nre", "").strip().upper()
@@ -66,7 +67,7 @@ def register():
 
 
 @app.get("/richiesta/<int:rich_id>")
-def richiesta(rich_id: int):
+def richiesta(rich_id: int) -> str:
     """Show a staged request's status; the template refreshes while pending."""
     with Store() as store:
         req = store.get_richiesta(rich_id)
@@ -76,7 +77,7 @@ def richiesta(rich_id: int):
 
 
 @app.get("/dashboard/<cf>")
-def dashboard(cf: str):
+def dashboard(cf: str) -> str:
     """Show a user's followed prestazioni and their current slots."""
     cf = cf.strip().upper()
     with Store() as store:
@@ -99,7 +100,7 @@ def dashboard(cf: str):
 
 
 @app.get("/api/state/<cf>")
-def api_state(cf: str):
+def api_state(cf: str) -> ResponseReturnValue:
     """Return the user's slot signature as JSON (polled by the dashboard).
 
     The signature changes when a new slot appears, so the page can reload only
@@ -111,13 +112,13 @@ def api_state(cf: str):
 
 
 @app.get("/add/<cf>")
-def add_form(cf: str):
+def add_form(cf: str) -> str:
     """The form to add another prestazione for an existing user."""
     return render_template("add.html", cf=cf.strip().upper())
 
 
 @app.post("/add/<cf>")
-def add(cf: str):
+def add(cf: str) -> ResponseReturnValue:
     """Stage an add-prestazione request for the daemon."""
     cf = cf.strip().upper()
     nre = request.form.get("nre", "").strip().upper()
@@ -134,7 +135,7 @@ def add(cf: str):
 
 
 @app.get("/history/<cf>")
-def history(cf: str):
+def history(cf: str) -> str:
     """Show a user's request history."""
     cf = cf.strip().upper()
     with Store() as store:
@@ -143,7 +144,7 @@ def history(cf: str):
 
 
 @app.get("/report/<cf>")
-def report(cf: str):
+def report(cf: str) -> ResponseReturnValue:
     """Build and download a PDF report of the user's current slots."""
     cf = cf.strip().upper()
     with Store() as store:

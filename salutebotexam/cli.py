@@ -13,6 +13,7 @@ Usage:
 
 import sys
 import time
+from collections.abc import Callable
 
 from store import Store
 from validation import valid_cf, valid_nre
@@ -25,7 +26,10 @@ _POLL_WAIT = 1.0
 class CLI:
     """The command-line client. I/O is injected so the flows are testable."""
 
-    def __init__(self, store: Store, read=input, write=print, sleep=time.sleep) -> None:
+    def __init__(self, store: Store,
+                 read: Callable[[str], str] = input,
+                 write: Callable[[str], None] = print,
+                 sleep: Callable[[float], None] = time.sleep) -> None:
         """Build the CLI.
 
         Args:
