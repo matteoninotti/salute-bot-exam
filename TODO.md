@@ -95,7 +95,7 @@ request). §10.6 = fill any gaps + full green.
 - [x] Keep annotations clean/simple — avoid complex `Callable`/`Union` unless necessary
 
 ### 10.5 — Documentation & notices
-- [ ] Add the exact disclaimer `local demonstration only; CF-only access, no authentication` to: `README.md` (*Demo limitations and security*), technical doc (*Analisi tecnica*), and the web login page (short, clearly visible UI notice)
+- [x] Add the exact disclaimer `local demonstration only; CF-only access, no authentication` to: `README.md` (*Demo limitations and security*), technical doc (*Analisi tecnica*), and the web login page (short, clearly visible UI notice)
 - [x] Review `log.md` — fully updated and aligned with these changes
 - [x] Update `CLAUDE.md` — new design decisions, single-return rule, encapsulation requirements
 - [x] Update `TODO.md` — this section (done first, before any other work)

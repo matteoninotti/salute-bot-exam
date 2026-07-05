@@ -134,3 +134,11 @@ salutebotexam/
 
 Il server CUP usa la porta **5050** e non la 5000, perché su macOS la 5000 è
 occupata da ControlCenter (Ricevitore AirPlay). Su GNU/Linux non fa differenza.
+
+## Demo limitations and security
+
+> **local demonstration only; CF-only access, no authentication**
+
+L'accesso avviene solo tramite Codice Fiscale, senza password né autenticazione;
+CF e NRE sono salvati in chiaro. Gli slot sono generati con Faker e non
+corrispondono a prenotazioni reali. Da usare solo in locale, a scopo dimostrativo.

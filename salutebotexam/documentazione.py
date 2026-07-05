@@ -44,14 +44,17 @@ generazione di documenti PDF.</p>
 
 <h2>c. Analisi tecnica</h2>
 
+<p><b>local demonstration only; CF-only access, no authentication</b></p>
+
 <h3>Architettura</h3>
 <p>Il sistema &egrave; composto da tre programmi che condividono un unico database
 SQLite:</p>
 <ul>
 <li><b>cup_server.py</b> (server): un finto sito CUP realizzato con Flask, che
-risponde via HTTP e restituisce gli slot leggendoli da un file di dati. Gli slot
-crescono nel tempo (a "frame"), cos&igrave; il watcher pu&ograve; osservare la
-comparsa di un posto nuovo.</li>
+risponde via HTTP e genera gli slot al volo con Faker (locale it_IT, seed fisso).
+Ogni prestazione parte da 3 slot e ne aggiunge uno ogni FRAME_SECONDS; ogni slot
+scade dopo 60 secondi, cos&igrave; il watcher pu&ograve; osservare sia la comparsa
+di un posto nuovo sia la scomparsa dei vecchi.</li>
 <li><b>daemon.py</b> (client): interroga periodicamente il server CUP, confronta
 gli slot con quelli gi&agrave; noti e salva i nuovi nel database. &Egrave; l'unico
 programma che comunica col server CUP.</li>
@@ -70,8 +73,10 @@ file di database condiviso (nessuna gestione client/server "vera" tra i due).</p
 <li><b>requests</b> - usata dal daemon per interrogare il server CUP via
 HTTP.</li>
 <li><b>fpdf2</b> - per generare il PDF dei posti e questa documentazione.</li>
+<li><b>Faker</b> - genera gli slot finti (date, orari, strutture, CAP,
+indirizzi) in italiano, con seed fisso per demo ripetibili.</li>
 <li><b>sqlite3</b> (libreria standard) - per il database.</li>
-<li>Altri moduli standard: <b>hashlib</b> (chiave degli slot), <b>argparse</b>
+<li>Altri moduli standard: <b>hashlib</b> (chiave degli slot), <b>sys</b>
 (comandi CLI), <b>datetime</b>, <b>os</b>, <b>pathlib</b>.</li>
 </ul>
 
