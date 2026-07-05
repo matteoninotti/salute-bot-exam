@@ -50,9 +50,9 @@ class Daemon:
         """Resolve a single pending request.
 
         Args:
-            req: a dict with keys id, cf, email, nre (from pending_richieste).
+            req: a dict with keys id, cf, nre (from pending_richieste).
         """
-        rid, cf, email, nre = req["id"], req["cf"], req["email"], req["nre"]
+        rid, cf, nre = req["id"], req["cf"], req["nre"]
         try:
             prestazione = self.__client.resolve_prestazione(nre)
             reachable = True
@@ -71,8 +71,7 @@ class Daemon:
             # user is not "alerted" for slots that existed before they subscribed.
             if not self.__store.has_slots(prestazione.code):
                 self.__baseline_slots(prestazione.code)
-            if email:
-                self.__store.add_user(cf, email)
+            self.__store.add_user(cf)
             self.__store.add_target(cf, prestazione.code, nre)
             self.__store.resolve_richiesta(rid, "ok", prestazione.code, prestazione.descrizione)
             print(f"[daemon] richiesta {rid}: {cf} ora segue "

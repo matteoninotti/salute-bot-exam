@@ -27,15 +27,13 @@ class TestUsers(StoreTestCase):
     """Users are added once and looked up by CF."""
 
     def test_add_and_find_user(self) -> None:
-        """A stored user is found and its email read back."""
-        self.store.add_user("RSSMRA80A01H501U", "a@b.it")
+        """A stored user is found by CF."""
+        self.store.add_user("RSSMRA80A01H501U")
         self.assertTrue(self.store.user_exists("RSSMRA80A01H501U"))
-        self.assertEqual(self.store.get_email("RSSMRA80A01H501U"), "a@b.it")
 
     def test_unknown_user(self) -> None:
         """An unknown CF is reported missing."""
         self.assertFalse(self.store.user_exists("NOPE"))
-        self.assertIsNone(self.store.get_email("NOPE"))
 
 
 class TestTargets(StoreTestCase):
@@ -44,7 +42,7 @@ class TestTargets(StoreTestCase):
     def setUp(self) -> None:
         """Seed one user and one prestazione for the subscription."""
         super().setUp()
-        self.store.add_user("RSSMRA80A01H501U", "a@b.it")
+        self.store.add_user("RSSMRA80A01H501U")
         self.store.upsert_prestazione(Prestazione("8901.20", "VISITA"))
 
     def test_add_target_and_read(self) -> None:
@@ -92,7 +90,7 @@ class TestRichieste(StoreTestCase):
 
     def test_lifecycle(self) -> None:
         """A pending request resolves to ok and appears in history."""
-        rid = self.store.add_richiesta("RSSMRA80A01H501U", "a@b.it", "010A31234500001")
+        rid = self.store.add_richiesta("RSSMRA80A01H501U", "010A31234500001")
         pending = self.store.pending_richieste()
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0]["id"], rid)

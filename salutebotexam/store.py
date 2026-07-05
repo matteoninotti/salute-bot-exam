@@ -49,28 +49,21 @@ class Store:
 
     # ----- users -----
 
-    def add_user(self, cf: str, email: str) -> None:
+    def add_user(self, cf: str) -> None:
         """Insert a user; do nothing if the CF already exists.
 
         Args:
             cf: the user's codice fiscale (primary key).
-            email: contact email.
         """
         self.__conn.execute(
-            "INSERT INTO utenti (cf, email) VALUES (?, ?) "
-            "ON CONFLICT(cf) DO NOTHING",
-            (cf, email),
+            "INSERT INTO utenti (cf) VALUES (?) ON CONFLICT(cf) DO NOTHING",
+            (cf,),
         )
         self.__conn.commit()
 
     def user_exists(self, cf: str) -> bool:
         """Return True if a user with this CF exists."""
         return self.__row("SELECT 1 FROM utenti WHERE cf = ?", (cf,)) is not None
-
-    def get_email(self, cf: str) -> str | None:
-        """Return the user's email, or None if the user is unknown."""
-        row = self.__row("SELECT email FROM utenti WHERE cf = ?", (cf,))
-        return row["email"] if row else None
 
     # ----- prestazioni -----
 
@@ -230,12 +223,11 @@ class Store:
 
     # ----- richieste (registration queue + per-user history) -----
 
-    def add_richiesta(self, cf: str, email: str | None, nre: str, now: str | None = None) -> int:
+    def add_richiesta(self, cf: str, nre: str, now: str | None = None) -> int:
         """Stage a pending registration/add request.
 
         Args:
             cf: the requesting user's CF.
-            email: contact email (None when an existing user adds a prestazione).
             nre: the prescription number to resolve.
             now: ISO timestamp; defaults to the current time.
         Returns:
@@ -243,9 +235,9 @@ class Store:
         """
         ts = now or _now()
         cur = self.__conn.execute(
-            "INSERT INTO richieste (cf, email, nre, status, requested_at) "
-            "VALUES (?, ?, ?, 'pending', ?)",
-            (cf, email, nre, ts),
+            "INSERT INTO richieste (cf, nre, status, requested_at) "
+            "VALUES (?, ?, 'pending', ?)",
+            (cf, nre, ts),
         )
         self.__conn.commit()
         return cur.lastrowid
@@ -254,10 +246,10 @@ class Store:
         """Return the requests still awaiting the daemon (status = 'pending').
 
         Returns:
-            A list of dicts with keys id, cf, email, nre.
+            A list of dicts with keys id, cf, nre.
         """
         rows = self.__rows(
-            "SELECT id, cf, email, nre FROM richieste WHERE status = 'pending' "
+            "SELECT id, cf, nre FROM richieste WHERE status = 'pending' "
             "ORDER BY requested_at",
             (),
         )

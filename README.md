@@ -70,7 +70,7 @@ python daemon.py
 
 **Terminale 3 — client a riga di comando:**
 ```bash
-python cli.py register          # nuovo utente: CF + email + NRE
+python cli.py register          # nuovo utente: CF + NRE
 python cli.py slots  <CF>        # posti trovati per le prestazioni seguite
 python cli.py history <CF>       # cronologia delle richieste
 python cli.py add               # aggiungi un'altra prestazione (CF + NRE)
@@ -124,7 +124,7 @@ salutebotexam/
 ├── cli.py             client a riga di comando
 ├── web.py             client web (Flask)
 ├── report.py          generazione PDF dei posti
-├── validation.py      controlli di formato (CF, NRE, email)
+├── validation.py      controlli di formato (CF, NRE)
 ├── data/fixtures.json dati finti degli slot
 ├── templates/         pagine HTML del client web
 └── static/style.css   stile del client web

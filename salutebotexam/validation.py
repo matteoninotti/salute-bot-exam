@@ -13,8 +13,3 @@ def valid_cf(cf: str) -> bool:
 def valid_nre(nre: str) -> bool:
     """Return True if nre looks like an NRE (15 alphanumeric chars)."""
     return len(nre) == 15 and nre.isalnum()
-
-
-def valid_email(email: str) -> bool:
-    """Return True if email has a single @ and a dotted domain."""
-    return email.count("@") == 1 and "." in email.split("@")[1]

@@ -52,13 +52,15 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## 10 — Exam refactor (professor requirements)
 
-**Execution — TDD, one subsection at a time on a `phase-10` branch (workflow in `log.md` §8):**
-for each subsection in order — (1) **write its `unittest` coverage first** (in
-`salutebotexam/tests/`, targeting the spec in `log.md`; it should fail), (2) implement
-until green, keeping the code **as simple and readable as possible**, (3) tick the boxes
-and sync this file, (4) **commit** (no push/merge without an explicit request). The
-behavioural areas (10.2 email removal, 10.3 slots, 10.4 types) are the directly testable
-ones; 10.1 is a style pass verified by keeping the behavioural tests green.
+**Execution — one subsection at a time on a `phase-10` branch (workflow in `log.md` §8):**
+write tests where they pay off. The stable modules (`models`, `validation`, `store`,
+`detector`) are already covered and guard every later change. The volatile server/client
+modules (`cup_server`, `daemon`, `cli`, `web`) get their **real** `unittest` coverage in
+the subsection where their behaviour settles (10.2 email, 10.3 slots, 10.4 types) — **no
+throwaway characterization tests up front**; each interim style change is guarded by
+**compile + a manual smoke run**. Keep code **as simple and readable as possible**; tick
+boxes, sync this file, and commit per subsection (no push/merge without an explicit
+request). §10.6 = fill any gaps + full green.
 
 ### 10.1 — Code style & architecture (all files)
 - [x] **Radical simplicity** — make ALL code much simpler: the most straightforward, readable implementation that just works; no cleverness or needless abstraction (readability first)
@@ -70,10 +72,10 @@ ones; 10.1 is a style pass verified by keeping the behavioural tests green.
 - [x] **Simplicity** — avoid `while True` except the daemon background loop
 
 ### 10.2 — Email removal (complete)
-- [ ] Remove the notification email field + all email logic **everywhere**: forms, `cli.py`, DB schema (`database.py`), `store.py`, `report.py`, `templates/`, and `documentazione.py`
-- [ ] Drop email from `validation.py` (CF/NRE only)
-- [ ] **Clean up every mention of email from the docs** — `README.md` (usage line & structure map), `log.md`, the technical PDF text, and any stray comments/docstrings
-- [ ] Discard existing demo databases — no data migration required
+- [x] Remove the notification email field + all email logic **everywhere**: forms, `cli.py`, DB schema (`database.py`), `store.py`, `report.py`, `templates/`, and `documentazione.py`
+- [x] Drop email from `validation.py` (CF/NRE only)
+- [x] **Clean up every mention of email from the docs** — `README.md` (usage line & structure map), the technical PDF text, and stray comments/docstrings (`log.md`/`CLAUDE.md` keep the *decision record* that email was removed)
+- [x] Discard existing demo databases — no data migration required
 
 ### 10.3 — Dynamic slot generation (CUP server)
 - [ ] Each service starts with **exactly 3** baseline slots

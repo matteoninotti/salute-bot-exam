@@ -5,7 +5,7 @@ prestazione) it stages a request in the database and waits for the daemon to
 resolve it. Listing slots and history are plain reads of the shared database.
 
 Usage:
-    python cli.py register        # new user: CF + email + NRE
+    python cli.py register        # new user: CF + NRE
     python cli.py add             # existing user: add another prestazione (CF + NRE)
     python cli.py slots [CF]      # current slots for the prestazioni you follow
     python cli.py history [CF]    # your request history
@@ -15,7 +15,7 @@ import sys
 import time
 
 from store import Store
-from validation import valid_cf, valid_email, valid_nre
+from validation import valid_cf, valid_nre
 
 # How long the CLI waits for the daemon to resolve a staged request.
 _POLL_TRIES = 30
@@ -49,13 +49,9 @@ class CLI:
         elif self.__store.user_exists(cf):
             self.__write("Sei gia' registrato. Usa 'add' per seguire un'altra prestazione.")
         else:
-            email = self.__read("Email per le notifiche: ").strip()
-            if not valid_email(email):
-                self.__write("Email non valida. Nulla e' stato salvato.")
-            else:
-                nre = self.__ask_nre()
-                if nre is not None:
-                    self.__submit(cf, email, nre)
+            nre = self.__ask_nre()
+            if nre is not None:
+                self.__submit(cf, nre)
 
     def add(self) -> None:
         """Add another prestazione for an already-registered user."""
@@ -67,7 +63,7 @@ class CLI:
         else:
             nre = self.__ask_nre()
             if nre is not None:
-                self.__submit(cf, None, nre)
+                self.__submit(cf, nre)
 
     def slots(self, cf: str | None = None) -> None:
         """Print the current slots for the prestazioni a user follows."""
@@ -105,9 +101,9 @@ class CLI:
 
     # ----- helpers -----
 
-    def __submit(self, cf: str, email: str | None, nre: str) -> None:
+    def __submit(self, cf: str, nre: str) -> None:
         """Stage a request, wait for the daemon, and report the outcome."""
-        rich_id = self.__store.add_richiesta(cf, email, nre)
+        rich_id = self.__store.add_richiesta(cf, nre)
         self.__write("Richiesta inviata al watcher, attendo la verifica della ricetta...")
         req = self.__poll(rich_id)
         if req["status"] == "pending":

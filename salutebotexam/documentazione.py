@@ -31,7 +31,7 @@ posti; l'utente si registra indicando la propria ricetta (NRE) e consulta i post
 trovati da riga di comando o da interfaccia web, con la possibilit&agrave; di
 esportarli in PDF.</p>
 <p>&Egrave; una versione semplificata di un progetto pi&ugrave; ampio: il sito CUP
-reale &egrave; sostituito da un server finto e non vengono inviate email.</p>
+reale &egrave; sostituito da un server finto.</p>
 
 <h2>b. Scopo</h2>
 <p>Prenotare una visita tramite CUP &egrave; difficile quando non ci sono posti:
@@ -77,13 +77,13 @@ HTTP.</li>
 
 <h3>Struttura del database</h3>
 <ul>
-<li><b>utenti</b>(cf, email)</li>
+<li><b>utenti</b>(cf)</li>
 <li><b>prestazioni</b>(code, descrizione)</li>
 <li><b>targets</b>(cf, code, nre) - l'iscrizione di un utente a una
 prestazione</li>
 <li><b>slots</b>(code, slot_key, date, time, struttura, cap, address, first_seen,
 last_seen) - i posti trovati, condivisi per prestazione</li>
-<li><b>richieste</b>(id, cf, email, nre, code, descrizione, status, requested_at,
+<li><b>richieste</b>(id, cf, nre, code, descrizione, status, requested_at,
 resolved_at) - coda delle registrazioni <i>e</i> cronologia per utente</li>
 </ul>
 
@@ -139,7 +139,7 @@ gestirli). In alternativa, tre terminali separati: 1) <code>python cup_server.py
 2) <code>python daemon.py</code>; 3) il client, a scelta:
 <code>python cli.py register</code> oppure <code>python web.py</code>
 (poi aprire http://127.0.0.1:5001).</p>
-<p><b>Input attesi:</b> Codice Fiscale (16 caratteri), email, NRE (15 caratteri).
+<p><b>Input attesi:</b> Codice Fiscale (16 caratteri), NRE (15 caratteri).
 Per le prove sono validi gli NRE <code>010A31234500001</code> (Visita urologica) e
 <code>020B45678900002</code> (Elettrocardiogramma); ogni altro NRE viene rifiutato.</p>
 <p><b>Output:</b> l'elenco dei posti disponibili per le prestazioni seguite, con i
@@ -152,7 +152,7 @@ con interfaccia a riga di comando, interfaccia grafica web lato client, stampa P
 dei report, database lato server con cronologia delle richieste per utente. La
 struttura a tre componenti tiene separate le responsabilit&agrave; (chi fornisce i
 dati, chi li raccoglie, chi li mostra) e rende il sistema facile da spiegare e da
-estendere. Possibili sviluppi futuri: notifiche reali (email), scraping del sito
+estendere. Possibili sviluppi futuri: notifiche reali, scraping del sito
 CUP effettivo, autenticazione degli utenti.</p>
 """
 

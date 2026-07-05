@@ -14,7 +14,7 @@ from flask import Flask, abort, redirect, render_template, request, send_file, u
 from config import WEB_PORT
 from report import SlotReport
 from store import Store
-from validation import valid_cf, valid_email, valid_nre
+from validation import valid_cf, valid_nre
 
 app = Flask(__name__)
 
@@ -46,24 +46,21 @@ def register_form():
 def register():
     """Validate the form and stage a registration request for the daemon."""
     cf = request.form.get("cf", "").strip().upper()
-    email = request.form.get("email", "").strip()
     nre = request.form.get("nre", "").strip().upper()
     errors = []
     if not valid_cf(cf):
         errors.append("CF non valido.")
-    if not valid_email(email):
-        errors.append("Email non valida.")
     if not valid_nre(nre):
         errors.append("NRE non valido.")
     if errors:
-        response = render_template("register.html", error=" ".join(errors), cf=cf, email=email)
+        response = render_template("register.html", error=" ".join(errors), cf=cf)
     else:
         with Store() as store:
             if store.user_exists(cf):
                 response = render_template("register.html",
                                            error="Sei gia' registrato. Accedi dalla home.")
             else:
-                rich_id = store.add_richiesta(cf, email, nre)
+                rich_id = store.add_richiesta(cf, nre)
                 response = redirect(url_for("richiesta", rich_id=rich_id))
     return response
 
@@ -85,7 +82,6 @@ def dashboard(cf: str):
     with Store() as store:
         known = store.user_exists(cf)
         if known:
-            email = store.get_email(cf)
             targets = store.get_user_targets(cf)
             rows = store.slots_for_user(cf)
             signature = store.slots_signature(cf)  # for the auto-refresh script
@@ -96,7 +92,7 @@ def dashboard(cf: str):
         slots_by_code: dict[str, list] = {}
         for row in rows:
             slots_by_code.setdefault(row["code"], []).append(row)
-        response = render_template("dashboard.html", cf=cf, email=email,
+        response = render_template("dashboard.html", cf=cf,
                                    targets=targets, slots_by_code=slots_by_code,
                                    signature=signature)
     return response
@@ -153,9 +149,8 @@ def report(cf: str):
     with Store() as store:
         if not store.user_exists(cf):
             abort(404)
-        email = store.get_email(cf)
         rows = store.slots_for_user(cf)
-    path = SlotReport(cf, email, rows).build()
+    path = SlotReport(cf, rows).build()
     return send_file(path, as_attachment=True, download_name=f"report_{cf}.pdf")
 
 

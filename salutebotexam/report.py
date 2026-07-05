@@ -17,17 +17,15 @@ from config import REPORT_DIR
 class SlotReport:
     """Builds a PDF slot report for one user. Fields are private (encapsulation)."""
 
-    def __init__(self, cf: str, email: str, rows: list[dict]) -> None:
+    def __init__(self, cf: str, rows: list[dict]) -> None:
         """Build the report object.
 
         Args:
             cf: the user's codice fiscale.
-            email: the user's email.
             rows: slot dicts from Store.slots_for_user (with code, descrizione,
                 date, time, struttura, cap, address, is_new).
         """
         self.__cf = cf
-        self.__email = email
         self.__rows = rows
 
     def build(self, out_path: str | None = None) -> str:
@@ -63,7 +61,6 @@ class SlotReport:
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(0, 6, f"Utente (CF): {self.__cf}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.cell(0, 6, f"Email: {self.__email}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.cell(0, 6, f"Generato il: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
                  new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.ln(4)

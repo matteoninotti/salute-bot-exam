@@ -12,8 +12,7 @@ from config import DB_PATH
 # The whole schema. CF and NRE are stored in clear text (exam simplification).
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS utenti (
-    cf     TEXT PRIMARY KEY,
-    email  TEXT NOT NULL
+    cf     TEXT PRIMARY KEY
 );
 
 CREATE TABLE IF NOT EXISTS prestazioni (
@@ -44,12 +43,10 @@ CREATE TABLE IF NOT EXISTS slots (
 -- The request log. It is both the daemon's registration work-queue and the
 -- per-user request history. A client inserts a row with status 'pending'; the
 -- daemon looks the NRE up on the CUP server and fills in code/descrizione and
--- flips status to 'ok' or 'invalid'. email is NULL when an existing user adds
--- another prestazione (their email is already stored in utenti).
+-- flips status to 'ok' or 'invalid'.
 CREATE TABLE IF NOT EXISTS richieste (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     cf            TEXT NOT NULL,
-    email         TEXT,
     nre           TEXT NOT NULL,
     code          TEXT,
     descrizione   TEXT,
