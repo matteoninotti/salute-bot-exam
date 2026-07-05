@@ -40,7 +40,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] Linux audit — grep clean (no macOS-isms; pathlib/os.path.join); `.venv` excluded from zip
 - [x] Config via env vars (`SALUTEBOT_DB`, `SALUTEBOT_FRAME_SECONDS`, ...) for testing + faster demo
 - [x] Store self-initialises the schema
-- [x] **Technical documentation PDF** (required deliverable): `documentazione.py` → `documentazione.pdf` (Oggetto, Scopo, Analisi tecnica, commenti procedure, guida I/O, Conclusioni). _Source is reworked in §10.2/§10.5; the binary is not regenerated (§10.6)._
+- [x] **Technical documentation** (required deliverable): `documentazione.md` (Oggetto, Scopo, Analisi tecnica, commenti procedure, guida I/O, Conclusioni). _Replaces the old `documentazione.py` → `documentazione.pdf` generator; content reworked in §10.2/§10.5._
 - [x] **Self-contained zip** of the project (excludes `.venv`, `__pycache__`, `*.db`, `report/`, dev docs) — _re-zip after the refactor_
 
 ## Post-build enhancements
