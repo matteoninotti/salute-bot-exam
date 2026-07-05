@@ -108,3 +108,13 @@ The only state the server keeps is its **start time** (in memory); restarting it
 8. **CLI vs web overlap** → **both fully featured** (register / list slots / history), each a complete client.
 
 _Nothing open right now — this section stays as a record; new questions get appended here as they come up._
+
+---
+
+## 7 — Exam deliverables & constraints (from the assignment)
+
+- **Runs on GNU/Linux.** "Programs that do not run will result in failure." The stack (Python 3, Flask, requests, fpdf2, sqlite3) is cross-platform; we avoid any macOS/Windows-specific calls. The delivered zip excludes the (macOS-built) `.venv`; the user recreates it on Linux via `pip install -r requirements.txt`.
+- **Technical documentation PDF** (separate from the app's slot-report PDF). Required sections: _Oggetto_, _Scopo_, _Analisi tecnica_ (libraries, algorithms, flowcharts, key code), _commenti su procedure_, _guida I/O_ (concise user guide), _Conclusioni_.
+- **Self-contained compressed project** (a zip that runs on its own).
+- **Code quality is graded (NOTE 2):** comments, DocStrings, **documented input/output parameter types** of functions/methods, well-structured code, **OOP**. → We use type hints on every signature + docstrings that state params and return, and heavy encapsulation throughout.
+- **Oral exam:** the project is presented and defended, so the code is kept at a level the student can fully explain (matches his course style).

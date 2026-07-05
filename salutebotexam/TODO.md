@@ -5,7 +5,7 @@ Keep in sync at each step: check items off (`[x]`) as they land.
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
-**Style reminder (all files):** English light docstrings, 4-space indent, Italian UI text, heavy encapsulation (`__private` + getters) on every class unless explicitly justified. Decisions live in `log.md`.
+**Style reminder (all files):** **type hints on every function/method signature** + docstrings documenting params & return (NOTE 2 of the assignment grades this), 4-space indent, Italian UI text, heavy encapsulation (`__private` + getters) on every class unless explicitly justified, OOP paradigm. Target OS = **GNU/Linux** (no macOS-isms). Decisions live in `log.md`.
 
 ## Exam requirements → where they are covered
 
@@ -33,9 +33,9 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] `cup_server.py` — Flask HTTP server (port 5050; 5000 is taken by macOS AirPlay): `/prestazione?nre=` (resolve NRE) + `/slots?code=` (frame by wall-clock, `FRAME_SECONDS`). Tested frame math (fake clock), routes (test client), and a real curl smoke.
 
 ## 5 — Client half (watcher)
-- [ ] `cup_client.py` — `CupClient`: `requests.get` wrapper → `Prestazione` / list of `Slot`
-- [ ] `detector.py` — diff current vs known slots → the new ones
-- [ ] `daemon.py` — loop: (a) resolve pending `richieste` (call CUP, create user/target, baseline slots), then (b) sweep watched prestazioni, detect + save new slots; idle heartbeat when no users
+- [x] `cup_client.py` — `CupClient`: `requests.get` wrapper → `Prestazione` / list of `Slot`. Tested against a live server (real HTTP).
+- [x] `detector.py` — diff current vs known slots → the new ones
+- [x] `daemon.py` — loop: (a) resolve pending `richieste` (call CUP, create user/target, baseline slots), then (b) sweep watched prestazioni, detect + save new slots; idle heartbeat when no users. Tested with a fake client (baseline → new-slot punchline).
 
 ## 6 — CLI client
 - [ ] `cli.py` — register (CF+email+NRE → stage a `richiesta`, block-poll until the daemon resolves it, show result), add prestazione, list slots, view history
@@ -48,6 +48,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [ ] `templates/` — base, index, register, dashboard, history
 - [ ] `static/style.css` — minimal styling
 
-## 9 — Wrap-up
+## 9 — Wrap-up & exam deliverables
 - [ ] `README.md` — how to run (start CUP server → daemon → CLI/web), Italian
+- [ ] Retrofit type hints + typed docstrings across all files (NOTE 2)
+- [ ] Linux audit — verify it runs on GNU/Linux (no macOS-isms); ideally test on Linux
+- [ ] **Technical documentation PDF** (required deliverable): Oggetto, Scopo, Analisi tecnica (librerie/algoritmi/flowchart), commenti su procedure, guida I/O, Conclusioni
+- [ ] **Self-contained zip** of the project (exclude `.venv`, `__pycache__`, `*.db`)
 - [ ] Manual end-to-end run: register a user (daemon resolves it), watch the daemon detect a new slot after `FRAME_SECONDS`, view history, export PDF

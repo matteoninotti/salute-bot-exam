@@ -60,16 +60,26 @@ CREATE TABLE IF NOT EXISTS richieste (
 """
 
 
-def get_connection(db_path=DB_PATH):
-    """Open a connection with row-by-name access and foreign keys on."""
+def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
+    """Open a connection with row-by-name access and foreign keys on.
+
+    Args:
+        db_path: path to the SQLite file (defaults to config.DB_PATH).
+    Returns:
+        An open sqlite3.Connection with row_factory set to sqlite3.Row.
+    """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
-def init_db(db_path=DB_PATH):
-    """Create every table if it does not exist yet."""
+def init_db(db_path: str = DB_PATH) -> None:
+    """Create every table if it does not exist yet.
+
+    Args:
+        db_path: path to the SQLite file (defaults to config.DB_PATH).
+    """
     conn = get_connection(db_path)
     conn.executescript(SCHEMA)
     conn.commit()
