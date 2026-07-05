@@ -41,7 +41,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] `cli.py` — `CLI` class (injected I/O): register (CF+email+NRE → stage a `richiesta`, block-poll until the daemon resolves it, show result), add prestazione, slots, history. Argparse sub-commands. Tested all flows + validation + timeout.
 
 ## 7 — PDF report
-- [ ] `report.py` — build a PDF of a user's slots (fpdf2)
+- [x] `report.py` — `SlotReport` class: build a PDF of a user's slots (fpdf2), grouped by prestazione, `[NUOVO]` marker. Tested: valid PDF, accented chars, empty case.
 
 ## 8 — Web GUI client
 - [ ] `web.py` — Flask app (login by CF; register → stage a `richiesta` & poll until resolved; dashboard slots with new highlighted; history; download PDF)
