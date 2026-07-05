@@ -89,6 +89,15 @@ NRE validi per le prove:
 - `010A31234500001` - Visita urologica
 - `020B45678900002` - Elettrocardiogramma
 
+**Terminale 3 — client a riga di comando:**
+
+```bash
+python cli.py register          # nuovo utente: CF + NRE
+python cli.py slots  <CF>        # posti trovati per le prestazioni seguite
+python cli.py history <CF>       # cronologia delle richieste
+python cli.py add               # aggiungi un'altra prestazione (CF + NRE)
+```
+
 **Output**
 
 - elenco dei posti disponibili per le prestazioni seguite
