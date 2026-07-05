@@ -38,7 +38,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] `daemon.py` — loop: (a) resolve pending `richieste` (call CUP, create user/target, baseline slots), then (b) sweep watched prestazioni, detect + save new slots; idle heartbeat when no users. Tested with a fake client (baseline → new-slot punchline).
 
 ## 6 — CLI client
-- [ ] `cli.py` — register (CF+email+NRE → stage a `richiesta`, block-poll until the daemon resolves it, show result), add prestazione, list slots, view history
+- [x] `cli.py` — `CLI` class (injected I/O): register (CF+email+NRE → stage a `richiesta`, block-poll until the daemon resolves it, show result), add prestazione, slots, history. Argparse sub-commands. Tested all flows + validation + timeout.
 
 ## 7 — PDF report
 - [ ] `report.py` — build a PDF of a user's slots (fpdf2)
