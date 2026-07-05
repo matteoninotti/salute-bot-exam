@@ -50,30 +50,32 @@ class Daemon:
         """Resolve a single pending request.
 
         Args:
-            req: a dict with keys id, cf, email, nre (from pending_richieste).
+            req: a dict with keys id, cf, nre (from pending_richieste).
         """
-        rid, cf, email, nre = req["id"], req["cf"], req["email"], req["nre"]
+        rid, cf, nre = req["id"], req["cf"], req["nre"]
         try:
             prestazione = self.__client.resolve_prestazione(nre)
+            reachable = True
         except CupError:
+            prestazione = None
+            reachable = False
+        if not reachable:
             # Leave it pending and try again next loop (the server may be down).
             print(f"[daemon] richiesta {rid}: CUP non raggiungibile, riprovo dopo")
-            return
-        if prestazione is None:
+        elif prestazione is None:
             self.__store.resolve_richiesta(rid, "invalid")
             print(f"[daemon] richiesta {rid}: NRE non valido")
-            return
-        self.__store.upsert_prestazione(prestazione)
-        # Brand-new prestazione: record its current slots as already-seen so the
-        # user is not "alerted" for slots that existed before they subscribed.
-        if not self.__store.has_slots(prestazione.code):
-            self.__baseline_slots(prestazione.code)
-        if email:
-            self.__store.add_user(cf, email)
-        self.__store.add_target(cf, prestazione.code, nre)
-        self.__store.resolve_richiesta(rid, "ok", prestazione.code, prestazione.descrizione)
-        print(f"[daemon] richiesta {rid}: {cf} ora segue "
-              f"{prestazione.code} - {prestazione.descrizione}")
+        else:
+            self.__store.upsert_prestazione(prestazione)
+            # Brand-new prestazione: record its current slots as already-seen so the
+            # user is not "alerted" for slots that existed before they subscribed.
+            if not self.__store.has_slots(prestazione.code):
+                self.__baseline_slots(prestazione.code)
+            self.__store.add_user(cf)
+            self.__store.add_target(cf, prestazione.code, nre)
+            self.__store.resolve_richiesta(rid, "ok", prestazione.code, prestazione.descrizione)
+            print(f"[daemon] richiesta {rid}: {cf} ora segue "
+                  f"{prestazione.code} - {prestazione.descrizione}")
 
     def __baseline_slots(self, code: str) -> None:
         """Record a brand-new prestazione's current slots as already-seen.
@@ -84,7 +86,7 @@ class Daemon:
         try:
             slots = self.__client.fetch_slots(code)
         except CupError:
-            return
+            slots = []
         now = _now()
         for slot in slots:
             self.__store.save_slot(code, slot, now)
@@ -105,17 +107,19 @@ class Daemon:
         try:
             slots = self.__client.fetch_slots(code)
         except CupError:
+            slots = None
+        if slots is None:
             print(f"[daemon] {code}: CUP non raggiungibile")
-            return
-        now = _now()
-        new_slots = detect_new_slots(self.__store, code, slots, now)
-        for slot in new_slots:
-            self.__store.save_slot(code, slot, now)
-        if new_slots:
-            print(f"[daemon] {code}: {len(new_slots)} nuovo/i posto/i "
-                  f"(totale disponibili: {len(slots)})")
         else:
-            print(f"[daemon] {code}: nessun nuovo posto (totale: {len(slots)})")
+            now = _now()
+            new_slots = detect_new_slots(self.__store, code, slots, now)
+            for slot in new_slots:
+                self.__store.save_slot(code, slot, now)
+            if new_slots:
+                print(f"[daemon] {code}: {len(new_slots)} nuovo/i posto/i "
+                      f"(totale disponibili: {len(slots)})")
+            else:
+                print(f"[daemon] {code}: nessun nuovo posto (totale: {len(slots)})")
 
     # ----- the loop -----
 

@@ -5,18 +5,18 @@ prestazione) it stages a request in the database and waits for the daemon to
 resolve it. Listing slots and history are plain reads of the shared database.
 
 Usage:
-    python cli.py register        # new user: CF + email + NRE
+    python cli.py register        # new user: CF + NRE
     python cli.py add             # existing user: add another prestazione (CF + NRE)
     python cli.py slots [CF]      # current slots for the prestazioni you follow
     python cli.py history [CF]    # your request history
 """
 
-import argparse
 import sys
 import time
+from collections.abc import Callable
 
 from store import Store
-from validation import valid_cf, valid_email, valid_nre
+from validation import valid_cf, valid_nre
 
 # How long the CLI waits for the daemon to resolve a staged request.
 _POLL_TRIES = 30
@@ -26,7 +26,10 @@ _POLL_WAIT = 1.0
 class CLI:
     """The command-line client. I/O is injected so the flows are testable."""
 
-    def __init__(self, store: Store, read=input, write=print, sleep=time.sleep) -> None:
+    def __init__(self, store: Store,
+                 read: Callable[[str], str] = input,
+                 write: Callable[[str], None] = print,
+                 sleep: Callable[[float], None] = time.sleep) -> None:
         """Build the CLI.
 
         Args:
@@ -46,72 +49,65 @@ class CLI:
         """Register a new user and their first prestazione (staged for the daemon)."""
         cf = self.__ask_cf()
         if cf is None:
-            return
-        if self.__store.user_exists(cf):
+            pass
+        elif self.__store.user_exists(cf):
             self.__write("Sei gia' registrato. Usa 'add' per seguire un'altra prestazione.")
-            return
-        email = self.__read("Email per le notifiche: ").strip()
-        if not valid_email(email):
-            self.__write("Email non valida. Nulla e' stato salvato.")
-            return
-        nre = self.__ask_nre()
-        if nre is None:
-            return
-        self.__submit(cf, email, nre)
+        else:
+            nre = self.__ask_nre()
+            if nre is not None:
+                self.__submit(cf, nre)
 
     def add(self) -> None:
         """Add another prestazione for an already-registered user."""
         cf = self.__ask_cf()
         if cf is None:
-            return
-        if not self.__store.user_exists(cf):
+            pass
+        elif not self.__store.user_exists(cf):
             self.__write("Nessun utente con questo CF. Usa 'register' per registrarti.")
-            return
-        nre = self.__ask_nre()
-        if nre is None:
-            return
-        self.__submit(cf, None, nre)
+        else:
+            nre = self.__ask_nre()
+            if nre is not None:
+                self.__submit(cf, nre)
 
     def slots(self, cf: str | None = None) -> None:
         """Print the current slots for the prestazioni a user follows."""
         cf = self.__resolve_cf(cf)
-        if cf is None:
-            return
-        rows = self.__store.slots_for_user(cf)
-        if not rows:
-            self.__write("Nessun posto disponibile per ora per le prestazioni che segui.")
-            return
-        current_code = None
-        for row in rows:
-            if row["code"] != current_code:
-                current_code = row["code"]
-                self.__write(f"\n{row['code']} - {row['descrizione']}")
-            mark = "  >> NUOVO" if row["is_new"] else ""
-            where = row["struttura"] or "?"
-            if row["address"]:
-                where = f"{where}, {row['address']}"
-            self.__write(f"  {row['date']} {row['time']} - {where}{mark}")
+        if cf is not None:
+            rows = self.__store.slots_for_user(cf)
+            if not rows:
+                self.__write("Nessun posto disponibile per ora per le prestazioni che segui.")
+            else:
+                current_code = None
+                for row in rows:
+                    if row["code"] != current_code:
+                        current_code = row["code"]
+                        self.__write(f"\n{row['code']} - {row['descrizione']}")
+                    mark = "  >> NUOVO" if row["is_new"] else ""
+                    where = row["struttura"] or "?"
+                    if row["address"]:
+                        where = f"{where}, {row['address']}"
+                    self.__write(f"  {row['date']} {row['time']} - {where}{mark}")
 
     def history(self, cf: str | None = None) -> None:
         """Print a user's request history (works even for a rejected request)."""
         cf = self.__resolve_cf(cf, require_user=False)
-        if cf is None:
-            return
-        rows = self.__store.history_for_user(cf)
-        if not rows:
-            self.__write("Nessuna richiesta nella cronologia.")
-            return
-        self.__write("Cronologia richieste:")
-        for row in rows:
-            esito = {"ok": "ok", "invalid": "NRE non valido", "pending": "in attesa"}
-            what = f"{row['descrizione']} ({row['code']})" if row["code"] else "-"
-            self.__write(f"  {row['requested_at'][:19]} | {esito.get(row['status'], row['status'])} | {what}")
+        if cf is not None:
+            rows = self.__store.history_for_user(cf)
+            if not rows:
+                self.__write("Nessuna richiesta nella cronologia.")
+            else:
+                esito = {"ok": "ok", "invalid": "NRE non valido", "pending": "in attesa"}
+                self.__write("Cronologia richieste:")
+                for row in rows:
+                    what = f"{row['descrizione']} ({row['code']})" if row["code"] else "-"
+                    stato = esito.get(row["status"], row["status"])
+                    self.__write(f"  {row['requested_at'][:19]} | {stato} | {what}")
 
     # ----- helpers -----
 
-    def __submit(self, cf: str, email: str | None, nre: str) -> None:
+    def __submit(self, cf: str, nre: str) -> None:
         """Stage a request, wait for the daemon, and report the outcome."""
-        rich_id = self.__store.add_richiesta(cf, email, nre)
+        rich_id = self.__store.add_richiesta(cf, nre)
         self.__write("Richiesta inviata al watcher, attendo la verifica della ricetta...")
         req = self.__poll(rich_id)
         if req["status"] == "pending":
@@ -130,28 +126,33 @@ class CLI:
         Returns:
             The request row (status may still be 'pending' on timeout).
         """
-        for _ in range(_POLL_TRIES):
-            req = self.__store.get_richiesta(rich_id)
-            if req["status"] != "pending":
-                return req
+        req = self.__store.get_richiesta(rich_id)
+        tries = 0
+        while req["status"] == "pending" and tries < _POLL_TRIES:
             self.__sleep(_POLL_WAIT)
-        return self.__store.get_richiesta(rich_id)
+            req = self.__store.get_richiesta(rich_id)
+            tries += 1
+        return req
 
     def __ask_cf(self) -> str | None:
         """Prompt for a CF and validate it; return the normalised CF or None."""
         cf = self.__read("Codice Fiscale: ").strip().upper()
-        if not valid_cf(cf):
+        result = None
+        if valid_cf(cf):
+            result = cf
+        else:
             self.__write("Formato CF non valido (attesi 16 caratteri alfanumerici).")
-            return None
-        return cf
+        return result
 
     def __ask_nre(self) -> str | None:
         """Prompt for an NRE and validate it; return the normalised NRE or None."""
         nre = self.__read("NRE (numero ricetta, 15 caratteri): ").strip().upper()
-        if not valid_nre(nre):
+        result = None
+        if valid_nre(nre):
+            result = nre
+        else:
             self.__write("Formato NRE non valido (attesi 15 caratteri alfanumerici).")
-            return None
-        return nre
+        return result
 
     def __resolve_cf(self, cf: str | None, require_user: bool = True) -> str | None:
         """Return a validated CF from the arg or a prompt.
@@ -166,49 +167,43 @@ class CLI:
             cf = self.__read("Codice Fiscale: ").strip().upper()
         else:
             cf = cf.strip().upper()
+        result = None
         if not valid_cf(cf):
             self.__write("Formato CF non valido.")
-            return None
-        if require_user and not self.__store.user_exists(cf):
+        elif require_user and not self.__store.user_exists(cf):
             self.__write("Nessun utente con questo CF. Usa 'register' per registrarti.")
-            return None
-        return cf
+        else:
+            result = cf
+        return result
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    """Build the argument parser with one sub-command per action."""
-    parser = argparse.ArgumentParser(
-        prog="salute-bot",
-        description="Client CLI: registrati e controlla i posti disponibili.",
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("register", help="registra un nuovo utente (CF + email + NRE)")
-    sub.add_parser("add", help="aggiungi un'altra prestazione (CF + NRE)")
-    p_slots = sub.add_parser("slots", help="mostra i posti trovati")
-    p_slots.add_argument("cf", nargs="?", help="codice fiscale (altrimenti richiesto)")
-    p_hist = sub.add_parser("history", help="mostra la cronologia delle richieste")
-    p_hist.add_argument("cf", nargs="?", help="codice fiscale (altrimenti richiesto)")
-    return parser
-
-
-def main(argv: list[str] | None = None) -> None:
-    """Parse the command line and run the chosen command.
+def _run(cli: CLI, command: str, cf: str | None) -> None:
+    """Dispatch the parsed command to the matching CLI method.
 
     Args:
-        argv: argument list (defaults to sys.argv[1:]).
+        cli: the CLI instance to drive.
+        command: the sub-command name (register/add/slots/history).
+        cf: the optional codice fiscale argument (slots/history).
     """
-    args = _build_parser().parse_args(sys.argv[1:] if argv is None else argv)
+    if command == "register":
+        cli.register()
+    elif command == "add":
+        cli.add()
+    elif command == "slots":
+        cli.slots(cf)
+    elif command == "history":
+        cli.history(cf)
+    else:
+        print("Uso: python cli.py [register | add | slots [CF] | history [CF]]")
+
+
+def main() -> None:
+    """Read the command from sys.argv and run it."""
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    cf = sys.argv[2] if len(sys.argv) > 2 else None
     store = Store()
     try:
-        cli = CLI(store)
-        if args.command == "register":
-            cli.register()
-        elif args.command == "add":
-            cli.add()
-        elif args.command == "slots":
-            cli.slots(args.cf)
-        elif args.command == "history":
-            cli.history(args.cf)
+        _run(CLI(store), command, cf)
     finally:
         store.close()
 

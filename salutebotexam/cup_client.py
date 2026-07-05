@@ -36,9 +36,10 @@ class CupClient:
             CupError: if the server is unreachable or misbehaves.
         """
         data = self.__get("/prestazione", {"nre": nre}, allow_404=True)
-        if data is None:
-            return None
-        return Prestazione(data["code"], data["descrizione"])
+        prestazione = None
+        if data is not None:
+            prestazione = Prestazione(data["code"], data["descrizione"])
+        return prestazione
 
     def fetch_slots(self, code: str) -> list[Slot]:
         """Fetch the current slots for a prestazione.
@@ -69,8 +70,10 @@ class CupClient:
             response = requests.get(self.__base_url + path, params=params, timeout=10)
         except requests.RequestException as err:
             raise CupError(f"CUP non raggiungibile: {err}")
-        if allow_404 and response.status_code == 404:
-            return None
-        if response.status_code != 200:
+        if response.status_code == 404 and allow_404:
+            data = None
+        elif response.status_code != 200:
             raise CupError(f"stato inatteso dal CUP: {response.status_code}")
-        return response.json()
+        else:
+            data = response.json()
+        return data

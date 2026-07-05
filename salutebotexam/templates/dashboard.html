@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Ciao, {{ cf }}</h2>
-<p class="muted">Notifiche a: {{ email }}</p>
 <p class="actions">
   <a href="{{ url_for('add_form', cf=cf) }}">+ Aggiungi prestazione</a>
   <a href="{{ url_for('history', cf=cf) }}">Cronologia</a>

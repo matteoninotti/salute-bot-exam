@@ -70,7 +70,7 @@ python daemon.py
 
 **Terminale 3 — client a riga di comando:**
 ```bash
-python cli.py register          # nuovo utente: CF + email + NRE
+python cli.py register          # nuovo utente: CF + NRE
 python cli.py slots  <CF>        # posti trovati per le prestazioni seguite
 python cli.py history <CF>       # cronologia delle richieste
 python cli.py add               # aggiungi un'altra prestazione (CF + NRE)
@@ -124,7 +124,7 @@ salutebotexam/
 ├── cli.py             client a riga di comando
 ├── web.py             client web (Flask)
 ├── report.py          generazione PDF dei posti
-├── validation.py      controlli di formato (CF, NRE, email)
+├── validation.py      controlli di formato (CF, NRE)
 ├── data/fixtures.json dati finti degli slot
 ├── templates/         pagine HTML del client web
 └── static/style.css   stile del client web
@@ -134,3 +134,11 @@ salutebotexam/
 
 Il server CUP usa la porta **5050** e non la 5000, perché su macOS la 5000 è
 occupata da ControlCenter (Ricevitore AirPlay). Su GNU/Linux non fa differenza.
+
+## Demo limitations and security
+
+> **local demonstration only; CF-only access, no authentication**
+
+L'accesso avviene solo tramite Codice Fiscale, senza password né autenticazione;
+CF e NRE sono salvati in chiaro. Gli slot sono generati con Faker e non
+corrispondono a prenotazioni reali. Da usare solo in locale, a scopo dimostrativo.

@@ -43,44 +43,44 @@ class Launcher:
         """Avvia server CUP, daemon e web in background e salva i PID."""
         if self.__running():
             print("Sembra gia' in esecuzione. Ferma prima con: python salutebotexam.py stop")
-            return
-        pids: dict[str, int] = {}
-        for name, script in _SERVICES:
-            pids[name] = self.__spawn(script)
-            if name == "cup_server" and not self.__wait_port(CUP_HOST, CUP_PORT):
-                print("Attenzione: il server CUP non risponde. Controlla logs/cup_server.log")
-        with open(_PID_FILE, "w", encoding="utf-8") as f:
-            json.dump(pids, f)
-        self.__wait_port(CUP_HOST, WEB_PORT)
-        print("Avviato in background:")
-        print(f"  server CUP  ->  http://{CUP_HOST}:{CUP_PORT}")
-        print("  daemon      ->  watcher attivo")
-        print(f"  web         ->  http://{CUP_HOST}:{WEB_PORT}")
-        print(f"Log in {_LOG_DIR}/ . Per fermare: python salutebotexam.py stop")
+        else:
+            pids: dict[str, int] = {}
+            for name, script in _SERVICES:
+                pids[name] = self.__spawn(script)
+                if name == "cup_server" and not self.__wait_port(CUP_HOST, CUP_PORT):
+                    print("Attenzione: il server CUP non risponde. Controlla logs/cup_server.log")
+            with open(_PID_FILE, "w", encoding="utf-8") as f:
+                json.dump(pids, f)
+            self.__wait_port(CUP_HOST, WEB_PORT)
+            print("Avviato in background:")
+            print(f"  server CUP  ->  http://{CUP_HOST}:{CUP_PORT}")
+            print("  daemon      ->  watcher attivo")
+            print(f"  web         ->  http://{CUP_HOST}:{WEB_PORT}")
+            print(f"Log in {_LOG_DIR}/ . Per fermare: python salutebotexam.py stop")
 
     def stop(self) -> None:
         """Ferma i processi elencati nel file dei PID."""
         pids = self.__read_pids()
         if not pids:
             print("Nessun processo registrato.")
-            return
-        for name, pid in pids.items():
-            try:
-                os.kill(pid, signal.SIGTERM)
-                print(f"fermato {name} (pid {pid})")
-            except ProcessLookupError:
-                print(f"{name} (pid {pid}) era gia' fermo")
-        os.remove(_PID_FILE)
+        else:
+            for name, pid in pids.items():
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    print(f"fermato {name} (pid {pid})")
+                except ProcessLookupError:
+                    print(f"{name} (pid {pid}) era gia' fermo")
+            os.remove(_PID_FILE)
 
     def status(self) -> None:
         """Stampa quali processi sono attivi."""
         pids = self.__read_pids()
         if not pids:
             print("Non in esecuzione.")
-            return
-        for name, pid in pids.items():
-            stato = "attivo" if self.__alive(pid) else "fermo"
-            print(f"  {name}: {stato} (pid {pid})")
+        else:
+            for name, pid in pids.items():
+                stato = "attivo" if self.__alive(pid) else "fermo"
+                print(f"  {name}: {stato} (pid {pid})")
 
     # ----- helper privati -----
 
@@ -110,22 +110,26 @@ class Launcher:
         Returns:
             True se la porta risponde entro il tempo previsto, False altrimenti.
         """
-        for _ in range(tries):
+        connected = False
+        attempt = 0
+        while not connected and attempt < tries:
             sock = socket.socket()
             try:
                 sock.connect((host, port))
                 sock.close()
-                return True
+                connected = True
             except OSError:
                 time.sleep(0.2)
-        return False
+            attempt += 1
+        return connected
 
     def __read_pids(self) -> dict[str, int]:
         """Legge il file dei PID; restituisce un dict vuoto se non esiste."""
-        if not os.path.exists(_PID_FILE):
-            return {}
-        with open(_PID_FILE, encoding="utf-8") as f:
-            return json.load(f)
+        pids: dict[str, int] = {}
+        if os.path.exists(_PID_FILE):
+            with open(_PID_FILE, encoding="utf-8") as f:
+                pids = json.load(f)
+        return pids
 
     def __running(self) -> bool:
         """True se almeno uno dei processi registrati e' ancora attivo."""
@@ -133,11 +137,12 @@ class Launcher:
 
     def __alive(self, pid: int) -> bool:
         """True se esiste un processo con questo PID."""
+        alive = True
         try:
             os.kill(pid, 0)  # segnale 0 = solo verifica di esistenza
-            return True
         except OSError:
-            return False
+            alive = False
+        return alive
 
 
 def main() -> None:

@@ -2,52 +2,75 @@
 
 It stands in for the real Piemonte CUP website. It answers two HTTP requests:
 what prestazione an NRE unlocks, and what slots a prestazione currently has.
-The slot list grows over wall-clock time (scripted frames) so the daemon can
-observe a new slot appearing.
+
+The only fixed data are the two services and the NRE map; every slot is
+generated on the fly with Faker (it_IT, fixed seed). Each service starts with 3
+baseline slots and gains one more per FRAME_SECONDS (missed intervals are caught
+up on the next request). A slot disappears 60 seconds after it is created, so the
+watcher can observe both new slots appearing and old ones expiring.
 
 Run:  python cup_server.py
 """
 
-import json
 import time
+from collections.abc import Callable
+from datetime import date
 
+from faker import Faker
 from flask import Flask, jsonify, request
+from flask.typing import ResponseReturnValue
 
-from config import CUP_HOST, CUP_PORT, FIXTURES_PATH, FRAME_SECONDS
+from config import CUP_HOST, CUP_PORT, FRAME_SECONDS
+
+# The only immutable server data: the two services and the NRE -> code map.
+_PRESTAZIONI = {
+    "8901.20": "VISITA UROLOGICA DI CONTROLLO",
+    "8702.1": "ELETTROCARDIOGRAMMA",
+}
+_NRE_TO_CODE = {
+    "010A31234500001": "8901.20",
+    "020B45678900002": "8702.1",
+}
+# A small curated pool of real Turin-area facilities; Faker picks from it.
+_FACILITIES = [
+    "OSPEDALE MOLINETTE",
+    "OSPEDALE MAURIZIANO",
+    "OSPEDALE SAN GIOVANNI BOSCO",
+    "OSPEDALE DI RIVOLI",
+    "OSPEDALE MARTINI",
+    "PRESIDIO SANITARIO GRADENIGO",
+    "OSPEDALE REGINA MARGHERITA",
+    "OSPEDALE SANT'ANNA",
+]
+_BASELINE = 3            # slots visible at the very first request
+_EXPIRY_SECONDS = 60     # a slot disappears this long after it is created
+_SEED = 0                # fixed Faker seed, so a fresh run repeats the sequence
+_LAST_DAY = date(2027, 12, 31)
 
 
 class CupData:
-    """Holds the canned data and decides how many slots are 'currently' visible.
+    """Generates and expires the slots each prestazione currently offers.
 
-    Each prestazione has a full ordered slot list; ``baseline`` of them are
-    visible at once, and one more becomes visible every ``frame_seconds``,
-    counted from the **first time that prestazione is requested** (not from server
-    start). So the first fetch always returns the baseline no matter how long the
-    server has been up, then the list grows one slot at a time until all are
-    shown. ``clock`` is injectable so the logic is testable without really
-    waiting.
+    Each code is anchored on its first request. From the anchor, ``baseline``
+    slots exist immediately and one more is due every ``frame_seconds``; each
+    slot lives for ``_EXPIRY_SECONDS``. ``clock`` is injectable so the growth
+    and expiry can be tested without really waiting.
     """
 
-    def __init__(self, fixtures_path: str, frame_seconds: float,
-                 clock=time.time) -> None:
-        """Load the fixture data.
+    def __init__(self, frame_seconds: float, clock: Callable[[], float] = time.time) -> None:
+        """Build the generator.
 
         Args:
-            fixtures_path: path to the JSON fixtures file.
-            frame_seconds: seconds between one slot becoming visible and the next.
-            clock: a callable returning the current time in seconds (injectable
-                for tests).
+            frame_seconds: seconds between one new slot becoming due and the next.
+            clock: a callable returning the current time in seconds (injectable).
         """
-        with open(fixtures_path, encoding="utf-8") as f:
-            data = json.load(f)
-        self.__prestazioni = data["prestazioni"]
-        self.__nre_to_code = data["nre_to_code"]
-        self.__slots = data["slots"]
-        self.__baseline = data["baseline"]
         self.__frame_seconds = frame_seconds
         self.__clock = clock
-        # Per-prestazione start time, set on that code's first /slots request.
-        self.__anchors: dict[str, float] = {}
+        self.__faker = Faker("it_IT")
+        Faker.seed(_SEED)
+        self.__anchors: dict[str, float] = {}          # code -> first-request time
+        self.__slots: dict[str, list] = {}             # code -> [{created, slot}]
+        self.__made: dict[str, int] = {}               # code -> slots ever created
 
     def resolve_nre(self, nre: str) -> dict | None:
         """Resolve an NRE to the prestazione it unlocks.
@@ -57,35 +80,68 @@ class CupData:
         Returns:
             A dict {code, descrizione}, or None if the NRE is unknown.
         """
-        code = self.__nre_to_code.get(nre)
-        if code is None:
-            return None
-        return {"code": code, "descrizione": self.__prestazioni.get(code, code)}
+        code = _NRE_TO_CODE.get(nre)
+        result = None
+        if code is not None:
+            result = {"code": code, "descrizione": _PRESTAZIONI[code]}
+        return result
 
     def slots_for(self, code: str) -> list | None:
-        """Return the slots currently visible for a prestazione.
+        """Return the slots currently available for a prestazione.
 
         Args:
             code: the prestazione code.
         Returns:
-            The first ``baseline + elapsed // frame_seconds`` slots (capped at the
-            full list), where elapsed is measured from this code's first request,
-            or None if the code is unknown.
+            The currently-available slots (baseline + one per elapsed frame, minus
+            those older than 60s), or None if the code is unknown.
         """
-        all_slots = self.__slots.get(code)
-        if all_slots is None:
-            return None
+        result = None
+        if code in _PRESTAZIONI:
+            self.__catch_up(code)
+            now = self.__clock()
+            self.__slots[code] = [
+                entry for entry in self.__slots[code]
+                if now - entry["created"] < _EXPIRY_SECONDS
+            ]
+            result = [entry["slot"] for entry in self.__slots[code]]
+        return result
+
+    def __catch_up(self, code: str) -> None:
+        """Create every slot that should exist by now (baseline + one per frame).
+
+        Args:
+            code: the prestazione code to advance.
+        """
+        now = self.__clock()
         if code not in self.__anchors:
-            self.__anchors[code] = self.__clock()  # start this code's clock now
-        elapsed = self.__clock() - self.__anchors[code]
-        visible = self.__baseline + int(elapsed // self.__frame_seconds)
-        if visible > len(all_slots):
-            visible = len(all_slots)
-        return all_slots[:visible]
+            self.__anchors[code] = now
+            self.__slots[code] = []
+            self.__made[code] = 0
+        anchor = self.__anchors[code]
+        due = _BASELINE + int((now - anchor) // self.__frame_seconds)
+        while self.__made[code] < due:
+            index = self.__made[code]
+            if index < _BASELINE:
+                created = anchor  # the baseline batch all share the anchor time
+            else:
+                created = anchor + (index - _BASELINE + 1) * self.__frame_seconds
+            self.__slots[code].append({"created": created, "slot": self.__make_slot()})
+            self.__made[code] += 1
+
+    def __make_slot(self) -> dict:
+        """Generate one random slot with Faker (it_IT)."""
+        appointment = self.__faker.date_between(start_date=date.today(), end_date=_LAST_DAY)
+        return {
+            "date": appointment.isoformat(),
+            "time": self.__faker.time(pattern="%H:%M"),
+            "struttura": self.__faker.random_element(_FACILITIES),
+            "cap": self.__faker.postcode(),
+            "address": self.__faker.street_address(),
+        }
 
 
 app = Flask(__name__)
-cup = CupData(FIXTURES_PATH, FRAME_SECONDS)
+cup = CupData(FRAME_SECONDS)
 
 
 @app.get("/")
@@ -95,7 +151,7 @@ def home() -> str:
 
 
 @app.get("/prestazione")
-def prestazione():
+def prestazione() -> ResponseReturnValue:
     """Resolve an NRE to the prestazione it unlocks (used during registration).
 
     Query params:
@@ -104,14 +160,16 @@ def prestazione():
         JSON {code, descrizione} with status 200, or {error} with status 404.
     """
     nre = request.args.get("nre", "")
-    result = cup.resolve_nre(nre)
-    if result is None:
-        return jsonify({"error": "NRE non riconosciuto"}), 404
-    return jsonify(result)
+    data = cup.resolve_nre(nre)
+    if data is None:
+        response = jsonify({"error": "NRE non riconosciuto"}), 404
+    else:
+        response = jsonify(data)
+    return response
 
 
 @app.get("/slots")
-def slots():
+def slots() -> ResponseReturnValue:
     """Return the current slots for a prestazione (the daemon polls this).
 
     Query params:
@@ -122,8 +180,10 @@ def slots():
     code = request.args.get("code", "")
     current = cup.slots_for(code)
     if current is None:
-        return jsonify({"error": "prestazione sconosciuta"}), 404
-    return jsonify({"code": code, "slots": current})
+        response = jsonify({"error": "prestazione sconosciuta"}), 404
+    else:
+        response = jsonify({"code": code, "slots": current})
+    return response
 
 
 def main() -> None:
