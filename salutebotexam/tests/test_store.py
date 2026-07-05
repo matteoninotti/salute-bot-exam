@@ -75,14 +75,21 @@ class TestSlots(StoreTestCase):
 
     def test_baseline_not_new_but_later_slot_is(self) -> None:
         """A shared-timestamp baseline is never new; a later slot is."""
+        now = "2026-07-01T00:00:45"
         for time in ("08:30", "09:00", "09:30"):
             self.store.save_slot("8901.20", self._slot(time), "2026-07-01T00:00:00")
-        rows = self.store.slots_for_code("8901.20")
+        rows = self.store.slots_for_code("8901.20", now)
+        self.assertEqual(len(rows), 3)
         self.assertTrue(all(not row["is_new"] for row in rows))
-        self.store.save_slot("8901.20", self._slot("10:00"), "2026-07-01T00:01:00")
-        new_rows = [row for row in self.store.slots_for_code("8901.20") if row["is_new"]]
+        self.store.save_slot("8901.20", self._slot("10:00"), "2026-07-01T00:00:30")
+        new_rows = [row for row in self.store.slots_for_code("8901.20", now) if row["is_new"]]
         self.assertEqual(len(new_rows), 1)
         self.assertEqual(new_rows[0]["time"], "10:00")
+
+    def test_expired_slots_are_hidden(self) -> None:
+        """A slot older than 60s (by first_seen) is filtered out on read."""
+        self.store.save_slot("8901.20", self._slot("08:30"), "2026-07-01T00:00:00")
+        self.assertEqual(self.store.slots_for_code("8901.20", "2026-07-01T00:02:00"), [])
 
 
 class TestRichieste(StoreTestCase):

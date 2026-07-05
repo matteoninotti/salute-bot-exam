@@ -78,16 +78,16 @@ request). §10.6 = fill any gaps + full green.
 - [x] Discard existing demo databases — no data migration required
 
 ### 10.3 — Dynamic slot generation (CUP server)
-- [ ] Each service starts with **exactly 3** baseline slots
-- [ ] Generate **infinite** new slots "at clock time" only for services `8901.20` and `8702.1`
-- [ ] Exactly **one new slot per `SALUTEBOT_FRAME_SECONDS`**; on missed intervals, catch up together on the next request — one slot per missed interval
-- [ ] `Faker` with `it_IT` locale + a **fixed seed = 0** (repeatable demos); add `Faker` to `requirements.txt`
-- [ ] Fields generated: `date`, `time`, `facility` (Faker-picked from a curated hospital pool), `CAP`, `address`
-- [ ] Appointment date range: random between **today** and **2027-12-31**
-- [ ] Show only **currently available** slots
-- [ ] Slots **expire 60s** after creation (auto-disappear), baseline included
-- [ ] A regenerated expired slot counts as **brand-new** (no historical persistence)
-- [ ] **Remove `data/fixtures.json`** — generate all slots dynamically in Python; the only immutable data are the two services and the NRE map: `{"010A31234500001": "8901.20", "020B45678900002": "8702.1"}`
+- [x] Each service starts with **exactly 3** baseline slots
+- [x] Generate **infinite** new slots "at clock time" only for services `8901.20` and `8702.1`
+- [x] Exactly **one new slot per `SALUTEBOT_FRAME_SECONDS`**; on missed intervals, catch up together on the next request — one slot per missed interval
+- [x] `Faker` with `it_IT` locale + a **fixed seed = 0** (repeatable demos); add `Faker` to `requirements.txt`
+- [x] Fields generated: `date`, `time`, `facility` (Faker-picked from a curated hospital pool), `CAP`, `address`
+- [x] Appointment date range: random between **today** and **2027-12-31**
+- [x] Show only **currently available** slots
+- [x] Slots **expire 60s** after creation (auto-disappear), baseline included
+- [x] A regenerated expired slot counts as **brand-new** (no historical persistence)
+- [x] **Remove `data/fixtures.json`** — generate all slots dynamically in Python; the only immutable data are the two services and the NRE map: `{"010A31234500001": "8901.20", "020B45678900002": "8702.1"}`
 
 ### 10.4 — Type coverage fixes
 - [ ] Add return annotations to all Flask routes (`web.py`, `cup_server.py`)

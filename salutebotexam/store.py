@@ -8,7 +8,7 @@ sort chronologically and stay unique down to the microsecond (which is what the
 
 import sqlite3
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from database import SCHEMA, get_connection
 from models import Prestazione, Slot
@@ -17,6 +17,15 @@ from models import Prestazione, Slot
 def _now() -> str:
     """Return the current time as an ISO string (microsecond precision)."""
     return datetime.now().isoformat()
+
+
+# A slot is only shown while it is within this many seconds of its first_seen.
+_EXPIRY_SECONDS = 60
+
+
+def _cutoff(now: str) -> str:
+    """Return the oldest first_seen still visible at ``now`` (i.e. now - 60s)."""
+    return (datetime.fromisoformat(now) - timedelta(seconds=_EXPIRY_SECONDS)).isoformat()
 
 
 class Store:
@@ -165,26 +174,32 @@ class Store:
         )
         self.__conn.commit()
 
-    def slots_for_code(self, code: str) -> list[dict]:
-        """Return all slots of one prestazione, each tagged with is_new.
+    def slots_for_code(self, code: str, now: str | None = None) -> list[dict]:
+        """Return the currently-available slots of one prestazione, tagged is_new.
+
+        Slots older than 60s (by first_seen) are hidden — the expiry filter.
 
         Args:
             code: the prestazione code.
+            now: ISO timestamp used as "current time"; defaults to the real now.
         Returns:
             A list of slot dicts (see _mark_new for the is_new field).
         """
         rows = self.__rows(
             "SELECT code, date, time, struttura, cap, address, first_seen, last_seen "
-            "FROM slots WHERE code = ? ORDER BY date, time",
-            (code,),
+            "FROM slots WHERE code = ? AND first_seen >= ? ORDER BY date, time",
+            (code, _cutoff(now or _now())),
         )
         return _mark_new([dict(r) for r in rows])
 
-    def slots_for_user(self, cf: str) -> list[dict]:
-        """Return all slots for the prestazioni a user follows.
+    def slots_for_user(self, cf: str, now: str | None = None) -> list[dict]:
+        """Return the currently-available slots for the prestazioni a user follows.
+
+        Slots older than 60s (by first_seen) are hidden — the expiry filter.
 
         Args:
             cf: the user's CF.
+            now: ISO timestamp used as "current time"; defaults to the real now.
         Returns:
             A list of slot dicts, each with its prestazione descrizione and an
             is_new flag, ordered by prestazione then date/time.
@@ -195,27 +210,30 @@ class Store:
             "FROM targets t "
             "JOIN slots s ON s.code = t.code "
             "JOIN prestazioni p ON p.code = t.code "
-            "WHERE t.cf = ? ORDER BY s.code, s.date, s.time",
-            (cf,),
+            "WHERE t.cf = ? AND s.first_seen >= ? ORDER BY s.code, s.date, s.time",
+            (cf, _cutoff(now or _now())),
         )
         return _mark_new([dict(r) for r in rows])
 
-    def slots_signature(self, cf: str) -> str:
+    def slots_signature(self, cf: str, now: str | None = None) -> str:
         """A short token that changes only when a user gains a new slot.
 
-        It combines how many slots the user can see with the most recent
-        first_seen, so it changes when a new slot is saved but not on a plain
-        last_seen bump. The web client polls this to know when to refresh.
+        It combines how many currently-available slots the user can see with the
+        most recent first_seen, so it changes when a new slot is saved (or an old
+        one expires) but not on a plain last_seen bump. The web client polls this
+        to know when to refresh. The same 60s expiry filter is applied.
 
         Args:
             cf: the user's CF.
+            now: ISO timestamp used as "current time"; defaults to the real now.
         Returns:
             A string like "<count>:<latest_first_seen>".
         """
         row = self.__row(
             "SELECT COUNT(*) AS n, MAX(s.first_seen) AS latest "
-            "FROM targets t JOIN slots s ON s.code = t.code WHERE t.cf = ?",
-            (cf,),
+            "FROM targets t JOIN slots s ON s.code = t.code "
+            "WHERE t.cf = ? AND s.first_seen >= ?",
+            (cf, _cutoff(now or _now())),
         )
         count = row["n"] if row else 0
         latest = (row["latest"] if row else None) or ""
