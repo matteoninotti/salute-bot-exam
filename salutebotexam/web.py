@@ -129,7 +129,7 @@ def add(cf: str) -> ResponseReturnValue:
             if not store.user_exists(cf):
                 response = render_template("index.html", error="Nessun utente con questo CF.")
             else:
-                rich_id = store.add_richiesta(cf, None, nre)
+                rich_id = store.add_richiesta(cf, nre)
                 response = redirect(url_for("richiesta", rich_id=rich_id))
     return response
 
