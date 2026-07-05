@@ -85,7 +85,7 @@ Qualsiasi altro NRE viene rifiutato come "non valido".
 | Variabile                  | Default | Uso |
 |----------------------------|---------|-----|
 | `SALUTEBOT_DB`             | `salutebot.db` | percorso del database |
-| `SALUTEBOT_FRAME_SECONDS`  | `20`    | secondi tra un "frame" di slot e il successivo (abbassalo per una demo più rapida) |
+| `SALUTEBOT_FRAME_SECONDS`  | `10`    | secondi tra un "frame" di slot e il successivo, contati dal primo controllo della prestazione (abbassalo per una demo più rapida) |
 | `SALUTEBOT_POLL_INTERVAL`  | `8`     | secondi tra un controllo del daemon e il successivo |
 | `SALUTEBOT_CUP_PORT`       | `5050`  | porta del server CUP |
 | `SALUTEBOT_WEB_PORT`       | `5001`  | porta del client web |

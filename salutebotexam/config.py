@@ -28,9 +28,9 @@ CUP_URL = f"http://{CUP_HOST}:{CUP_PORT}"
 WEB_PORT = int(os.environ.get("SALUTEBOT_WEB_PORT", "5001"))
 
 # How many seconds each scripted slot "frame" lasts before the CUP server moves
-# to the next one. Growth is on the wall clock, so new slots appear on schedule
-# no matter how often the daemon polls. Lower it for a quicker demo.
-FRAME_SECONDS = float(os.environ.get("SALUTEBOT_FRAME_SECONDS", "20"))
+# to the next one, counted from the first time a prestazione is watched. So a new
+# slot appears about FRAME_SECONDS after registration. Lower it for a quicker demo.
+FRAME_SECONDS = float(os.environ.get("SALUTEBOT_FRAME_SECONDS", "10"))
 
 # Seconds the daemon waits between one sweep and the next.
 POLL_INTERVAL = float(os.environ.get("SALUTEBOT_POLL_INTERVAL", "8"))
