@@ -27,7 +27,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] `models.py` — `Slot` (natural-key hash) + `Prestazione`, private attrs + getters (tested: key stability, address excluded from key, name-mangling)
 
 ## 3 — Persistence
-- [ ] `store.py` — `Store` class: users, prestazioni, targets; slots (save / known-keys / touch / read with `is_new` inferred from newest `first_seen`); `richieste` (insert pending, read a user's history); daemon-side resolve helpers (create user+target, baseline slots)
+- [x] `store.py` — `Store` class: users, prestazioni, targets; slots (save / known-keys / touch / read with `is_new` inferred from newest `first_seen`); `richieste` (insert pending, read a user's history); daemon-side resolve helpers (create user+target, baseline slots). Tested full lifecycle + is_new rule.
 
 ## 4 — Server half (mock CUP)
 - [ ] `cup_server.py` — Flask HTTP server: `/prestazione?nre=` (resolve NRE, no advance) + `/slots?code=` (frame chosen by wall-clock since startup, `FRAME_SECONDS`)
