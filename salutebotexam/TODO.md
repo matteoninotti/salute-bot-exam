@@ -24,7 +24,7 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] `database.py` — connection helper + schema: tables `utenti`, `prestazioni`, `targets`, `slots`, **`richieste`** (registration work-queue + per-user history)
 
 ## 2 — Domain models
-- [x] `models.py` — `Slot` (natural-key hash) + `Prestazione`, private attrs + getters
+- [x] `models.py` — `Slot` (natural-key hash) + `Prestazione`, private attrs + getters (tested: key stability, address excluded from key, name-mangling)
 
 ## 3 — Persistence
 - [ ] `store.py` — `Store` class: users, prestazioni, targets; slots (save / known-keys / touch / read with `is_new` inferred from newest `first_seen`); `richieste` (insert pending, read a user's history); daemon-side resolve helpers (create user+target, baseline slots)
