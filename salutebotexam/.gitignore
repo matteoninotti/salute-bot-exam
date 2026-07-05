@@ -1,0 +1,12 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# SQLite database (created at runtime)
+*.db
+
+# Generated PDF reports
+report/
