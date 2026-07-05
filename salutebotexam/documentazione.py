@@ -1,7 +1,8 @@
 """Generatore della documentazione tecnica in PDF (deliverable d'esame).
 
-Produce ``documentazione.pdf`` a partire dal contenuto HTML qui sotto, usando
-la libreria fpdf2 (la stessa del report degli slot). Esegui:
+Produce ``documentazione.pdf`` alla radice del repository (accanto a README.md
+e TODO.md) a partire dal contenuto HTML qui sotto, usando la libreria fpdf2 (la
+stessa del report degli slot). Esegui:
 
     python documentazione.py
 """
@@ -161,12 +162,14 @@ def build(out_path: str | None = None) -> str:
 
     Args:
         out_path: percorso del PDF da creare; se None usa
-            ``documentazione.pdf`` nella cartella del progetto.
+            ``documentazione.pdf`` alla radice del repository (la cartella che
+            contiene ``salutebotexam/``).
     Returns:
         Il percorso del file PDF creato.
     """
     if out_path is None:
-        out_path = os.path.join(str(BASE_DIR), "documentazione.pdf")
+        repo_root = os.path.dirname(str(BASE_DIR))
+        out_path = os.path.join(repo_root, "documentazione.pdf")
     pdf = FPDF()
     pdf.set_title("salute-bot (versione esame) - Documentazione tecnica")
     pdf.add_page()

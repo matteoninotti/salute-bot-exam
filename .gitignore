@@ -254,3 +254,9 @@ documentazione.pdf
 
 # Submission zip, built on demand from the final repo state
 salutebotexam.zip
+
+# salutebotexam/ — its own virtual env + runtime-generated files
+salutebotexam/.venv/
+salutebotexam/logs/
+salutebotexam/report/
+salutebotexam/documentazione.pdf
