@@ -25,7 +25,16 @@ class CupData:
     without really waiting.
     """
 
-    def __init__(self, fixtures_path, frame_seconds, clock=time.time):
+    def __init__(self, fixtures_path: str, frame_seconds: float,
+                 clock=time.time) -> None:
+        """Load the fixture data and record the start time.
+
+        Args:
+            fixtures_path: path to the JSON fixtures file.
+            frame_seconds: how long each slot frame lasts before advancing.
+            clock: a callable returning the current time in seconds (injectable
+                for tests).
+        """
         with open(fixtures_path, encoding="utf-8") as f:
             data = json.load(f)
         self.__prestazioni = data["prestazioni"]
@@ -35,15 +44,28 @@ class CupData:
         self.__clock = clock
         self.__start = clock()
 
-    def resolve_nre(self, nre):
-        """The prestazione an NRE unlocks, or None if the NRE is unknown."""
+    def resolve_nre(self, nre: str) -> dict | None:
+        """Resolve an NRE to the prestazione it unlocks.
+
+        Args:
+            nre: the prescription number.
+        Returns:
+            A dict {code, descrizione}, or None if the NRE is unknown.
+        """
         code = self.__nre_to_code.get(nre)
         if code is None:
             return None
         return {"code": code, "descrizione": self.__prestazioni.get(code, code)}
 
-    def slots_for(self, code):
-        """The current frame of slots for a prestazione, or None if unknown."""
+    def slots_for(self, code: str) -> list | None:
+        """Return the current frame of slots for a prestazione.
+
+        Args:
+            code: the prestazione code.
+        Returns:
+            The list of slot dicts for the frame selected by elapsed wall-clock
+            time (last frame is sticky), or None if the code is unknown.
+        """
         frames = self.__frames.get(code)
         if frames is None:
             return None
@@ -59,13 +81,20 @@ cup = CupData(FIXTURES_PATH, FRAME_SECONDS)
 
 
 @app.get("/")
-def home():
+def home() -> str:
+    """Return a short banner so the server is easy to check in a browser."""
     return "CUP finto attivo. Prova /prestazione?nre=... oppure /slots?code=..."
 
 
 @app.get("/prestazione")
 def prestazione():
-    """Resolve an NRE to the prestazione it unlocks (used during registration)."""
+    """Resolve an NRE to the prestazione it unlocks (used during registration).
+
+    Query params:
+        nre: the prescription number.
+    Returns:
+        JSON {code, descrizione} with status 200, or {error} with status 404.
+    """
     nre = request.args.get("nre", "")
     result = cup.resolve_nre(nre)
     if result is None:
@@ -75,7 +104,13 @@ def prestazione():
 
 @app.get("/slots")
 def slots():
-    """The current slots for a prestazione (the daemon polls this)."""
+    """Return the current slots for a prestazione (the daemon polls this).
+
+    Query params:
+        code: the prestazione code.
+    Returns:
+        JSON {code, slots} with status 200, or {error} with status 404.
+    """
     code = request.args.get("code", "")
     current = cup.slots_for(code)
     if current is None:
@@ -83,7 +118,8 @@ def slots():
     return jsonify({"code": code, "slots": current})
 
 
-def main():
+def main() -> None:
+    """Start the Flask development server."""
     app.run(host=CUP_HOST, port=CUP_PORT, debug=False)
 
 
