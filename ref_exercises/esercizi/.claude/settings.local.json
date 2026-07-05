@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 OS_es_3.py)"
+    ]
+  }
+}
