@@ -1,0 +1,78 @@
+/* salute-bot (versione esame) — minimal styling */
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  color: #1c2733;
+  background: #f6f8fa;
+  line-height: 1.5;
+}
+
+header { border-bottom: 2px solid #0a7d4b; margin-bottom: 1.5rem; }
+header h1 { margin: 0; font-size: 1.6rem; }
+header h1 a { color: #0a7d4b; text-decoration: none; }
+.sub { margin: 0.1rem 0 0.8rem; color: #607080; font-size: 0.9rem; }
+
+h2 { font-size: 1.3rem; }
+h3 { margin-top: 1.6rem; }
+h4 { margin: 0.2rem 0; }
+
+a { color: #0a6cff; }
+
+form { display: flex; flex-direction: column; gap: 0.8rem; max-width: 420px; }
+label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; color: #40515f; }
+input {
+  padding: 0.5rem;
+  border: 1px solid #c4cdd6;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+button {
+  align-self: flex-start;
+  padding: 0.55rem 1.2rem;
+  background: #0a7d4b;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+button:hover { background: #086b40; }
+
+.actions { display: flex; gap: 1rem; flex-wrap: wrap; margin: 0.5rem 0 1rem; }
+
+.prest {
+  background: #fff;
+  border: 1px solid #e1e6eb;
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1rem;
+}
+ul.slots { list-style: none; padding: 0; margin: 0.5rem 0 0; }
+ul.slots li {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid #eef1f4;
+}
+ul.slots li.new { background: #fff6da; border-radius: 4px; font-weight: 600; }
+
+.badge {
+  display: inline-block;
+  background: #e0a800;
+  color: #fff;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+table { border-collapse: collapse; width: 100%; background: #fff; }
+th, td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid #e1e6eb; }
+th { background: #eef3f0; }
+
+.error { color: #b21f2d; background: #fdecee; padding: 0.5rem 0.7rem; border-radius: 6px; }
+.muted { color: #708090; font-size: 0.9rem; }

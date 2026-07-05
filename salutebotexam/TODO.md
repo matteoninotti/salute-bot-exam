@@ -44,9 +44,10 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] `report.py` — `SlotReport` class: build a PDF of a user's slots (fpdf2), grouped by prestazione, `[NUOVO]` marker. Tested: valid PDF, accented chars, empty case.
 
 ## 8 — Web GUI client
-- [ ] `web.py` — Flask app (login by CF; register → stage a `richiesta` & poll until resolved; dashboard slots with new highlighted; history; download PDF)
-- [ ] `templates/` — base, index, register, dashboard, history
-- [ ] `static/style.css` — minimal styling
+- [x] `web.py` — Flask app (login by CF; register → stage a `richiesta`, page auto-refreshes until the daemon resolves it; dashboard slots with new highlighted; add prestazione; history; download PDF). Tested all routes (Flask test client) + real HTTP.
+- [x] `templates/` — base, index, register, richiesta, dashboard, add, history
+- [x] `static/style.css` — minimal styling
+- [x] `validation.py` — shared CF/NRE/email checks (CLI + web); `Store` context-manager
 
 ## 9 — Wrap-up & exam deliverables
 - [ ] `README.md` — how to run (start CUP server → daemon → CLI/web), Italian

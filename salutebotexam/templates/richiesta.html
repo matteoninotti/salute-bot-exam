@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block head %}
+  {% if req.status == 'pending' %}<meta http-equiv="refresh" content="2">{% endif %}
+{% endblock %}
+{% block content %}
+{% if req.status == 'pending' %}
+  <h2>Richiesta in corso&hellip;</h2>
+  <p>Attendo che il watcher verifichi la ricetta sul sistema di prenotazione.
+     La pagina si aggiorna automaticamente.</p>
+  <p class="muted">(Il daemon deve essere in esecuzione.)</p>
+{% elif req.status == 'ok' %}
+  <h2>Registrazione completata</h2>
+  <p>Ora segui <strong>{{ req.descrizione }}</strong> ({{ req.code }}).</p>
+  <p><a href="{{ url_for('dashboard', cf=req.cf) }}">Vai alla dashboard</a></p>
+{% else %}
+  <h2>Ricetta non valida</h2>
+  <p>L'NRE inserito non &egrave; valido (scaduto, gi&agrave; usato o non riconosciuto).
+     Nulla &egrave; stato salvato.</p>
+  <p><a href="{{ url_for('register_form') }}">Riprova</a></p>
+{% endif %}
+{% endblock %}

@@ -35,6 +35,14 @@ class Store:
         """Close the underlying connection."""
         self.__conn.close()
 
+    def __enter__(self) -> "Store":
+        """Enter a ``with`` block, returning self."""
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        """Close the connection when leaving a ``with`` block."""
+        self.close()
+
     # ----- users -----
 
     def add_user(self, cf: str, email: str) -> None:

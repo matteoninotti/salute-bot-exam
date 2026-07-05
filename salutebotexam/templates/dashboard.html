@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Ciao, {{ cf }}</h2>
+<p class="muted">Notifiche a: {{ email }}</p>
+<p class="actions">
+  <a href="{{ url_for('add_form', cf=cf) }}">+ Aggiungi prestazione</a>
+  <a href="{{ url_for('history', cf=cf) }}">Cronologia</a>
+  <a href="{{ url_for('report', cf=cf) }}">Scarica PDF</a>
+</p>
+
+<h3>Prestazioni seguite</h3>
+{% if not targets %}
+  <p>Non segui ancora nessuna prestazione. <a href="{{ url_for('add_form', cf=cf) }}">Aggiungine una</a>.</p>
+{% endif %}
+
+{% for t in targets %}
+  {% set slots = slots_by_code.get(t.code, []) %}
+  <div class="prest">
+    <h4>{{ t.code }} &mdash; {{ t.descrizione }}</h4>
+    {% if slots %}
+      <ul class="slots">
+        {% for s in slots %}
+          <li class="{{ 'new' if s.is_new else '' }}">
+            {{ s.date }} {{ s.time }} &mdash; {{ s.struttura }}{% if s.address %}, {{ s.address }}{% endif %}
+            {% if s.is_new %}<span class="badge">NUOVO</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Nessun posto disponibile per ora &mdash; il watcher sta controllando.</p>
+    {% endif %}
+  </div>
+{% endfor %}
+{% endblock %}
