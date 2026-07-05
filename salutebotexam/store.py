@@ -10,7 +10,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import datetime
 
-from database import get_connection
+from database import SCHEMA, get_connection
 from models import Prestazione, Slot
 
 
@@ -30,6 +30,10 @@ class Store:
                 is passed by tests to use a throwaway database.
         """
         self.__conn = get_connection() if db_path is None else get_connection(db_path)
+        # Ensure the tables exist (idempotent, CREATE ... IF NOT EXISTS) so any
+        # process that opens the store first works without a separate init step.
+        self.__conn.executescript(SCHEMA)
+        self.__conn.commit()
 
     def close(self) -> None:
         """Close the underlying connection."""

@@ -2,14 +2,18 @@
 
 Everything that more than one module needs to agree on lives here: the database
 file, the fixtures file, the mock CUP address, and the daemon poll interval.
+
+Most values can be overridden with an environment variable, which is handy for
+testing and for a faster demo (e.g. a shorter FRAME_SECONDS).
 """
 
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
 # Database and data files
-DB_PATH = str(BASE_DIR / "salutebot.db")
+DB_PATH = os.environ.get("SALUTEBOT_DB", str(BASE_DIR / "salutebot.db"))
 FIXTURES_PATH = str(BASE_DIR / "data" / "fixtures.json")
 REPORT_DIR = str(BASE_DIR / "report")
 
@@ -17,16 +21,16 @@ REPORT_DIR = str(BASE_DIR / "report")
 # Port 5050, not 5000: on macOS port 5000 is taken by ControlCenter (AirPlay
 # Receiver), which would answer requests instead of our server.
 CUP_HOST = "127.0.0.1"
-CUP_PORT = 5050
+CUP_PORT = int(os.environ.get("SALUTEBOT_CUP_PORT", "5050"))
 CUP_URL = f"http://{CUP_HOST}:{CUP_PORT}"
+
+# Web GUI client
+WEB_PORT = int(os.environ.get("SALUTEBOT_WEB_PORT", "5001"))
 
 # How many seconds each scripted slot "frame" lasts before the CUP server moves
 # to the next one. Growth is on the wall clock, so new slots appear on schedule
-# no matter how often the daemon polls.
-FRAME_SECONDS = 20
+# no matter how often the daemon polls. Lower it for a quicker demo.
+FRAME_SECONDS = float(os.environ.get("SALUTEBOT_FRAME_SECONDS", "20"))
 
-# Web GUI client
-WEB_PORT = 5001
-
-# Daemon: seconds to wait between one sweep and the next
-POLL_INTERVAL = 8
+# Seconds the daemon waits between one sweep and the next.
+POLL_INTERVAL = float(os.environ.get("SALUTEBOT_POLL_INTERVAL", "8"))

@@ -50,9 +50,11 @@ Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] `validation.py` — shared CF/NRE/email checks (CLI + web); `Store` context-manager
 
 ## 9 — Wrap-up & exam deliverables
-- [ ] `README.md` — how to run (start CUP server → daemon → CLI/web), Italian
-- [ ] Retrofit type hints + typed docstrings across all files (NOTE 2)
-- [ ] Linux audit — verify it runs on GNU/Linux (no macOS-isms); ideally test on Linux
-- [ ] **Technical documentation PDF** (required deliverable): Oggetto, Scopo, Analisi tecnica (librerie/algoritmi/flowchart), commenti su procedure, guida I/O, Conclusioni
-- [ ] **Self-contained zip** of the project (exclude `.venv`, `__pycache__`, `*.db`)
-- [ ] Manual end-to-end run: register a user (daemon resolves it), watch the daemon detect a new slot after `FRAME_SECONDS`, view history, export PDF
+- [x] `README.md` — how to run (start CUP server → daemon → CLI/web), Italian + env vars + project map
+- [x] Retrofit type hints + typed docstrings across all files (NOTE 2)
+- [x] Linux audit — grep clean (no macOS-isms; pathlib/os.path.join); `.venv` excluded from zip
+- [x] Config via env vars (`SALUTEBOT_DB`, `SALUTEBOT_FRAME_SECONDS`, ...) for testing + faster demo
+- [x] Store self-initialises the schema (bug found by the e2e: no process created tables)
+- [x] **Technical documentation PDF** (required deliverable): `documentazione.py` → `documentazione.pdf` (Oggetto, Scopo, Analisi tecnica, commenti procedure, guida I/O, Conclusioni). 3 pages.
+- [x] **Self-contained zip** of the project (excludes `.venv`, `__pycache__`, `*.db`, `report/`, dev docs)
+- [x] Manual end-to-end run: register (daemon resolves), new slot appears after FRAME_SECONDS (`>> NUOVO`), history, PDF — all as real processes over HTTP + sqlite

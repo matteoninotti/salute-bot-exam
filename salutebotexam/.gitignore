@@ -10,3 +10,6 @@ __pycache__/
 
 # Generated PDF reports
 report/
+
+# Generated technical documentation (regenerate with: python documentazione.py)
+documentazione.pdf
