@@ -84,11 +84,25 @@ def dashboard(cf: str):
         email = store.get_email(cf)
         targets = store.get_user_targets(cf)
         rows = store.slots_for_user(cf)
+        signature = store.slots_signature(cf)  # for the auto-refresh script
     slots_by_code: dict[str, list] = {}
     for row in rows:
         slots_by_code.setdefault(row["code"], []).append(row)
     return render_template("dashboard.html", cf=cf, email=email,
-                           targets=targets, slots_by_code=slots_by_code)
+                           targets=targets, slots_by_code=slots_by_code,
+                           signature=signature)
+
+
+@app.get("/api/state/<cf>")
+def api_state(cf: str):
+    """Return the user's slot signature as JSON (polled by the dashboard).
+
+    The signature changes when a new slot appears, so the page can reload only
+    when there is actually something new to show.
+    """
+    cf = cf.strip().upper()
+    with Store() as store:
+        return {"signature": store.slots_signature(cf)}
 
 
 @app.get("/add/<cf>")

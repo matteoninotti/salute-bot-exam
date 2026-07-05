@@ -31,4 +31,26 @@
     {% endif %}
   </div>
 {% endfor %}
+
+<p class="muted" id="live-hint">Aggiornamento automatico attivo: la pagina si ricarica appena compare un nuovo posto.</p>
+
+<script>
+  // Auto-refresh: poll a tiny endpoint that returns a signature (slot count +
+  // newest first_seen). When it differs from the value this page was rendered
+  // with, a new slot has appeared, so reload to show it (highlighted server-side).
+  const CF = "{{ cf }}";
+  const initialSignature = "{{ signature }}";
+  async function checkForNewSlots() {
+    try {
+      const resp = await fetch(`/api/state/${CF}`);
+      const data = await resp.json();
+      if (data.signature !== initialSignature) {
+        window.location.reload();
+      }
+    } catch (err) {
+      // Server momentarily unreachable: ignore and try again next tick.
+    }
+  }
+  setInterval(checkForNewSlots, 3000);
+</script>
 {% endblock %}
